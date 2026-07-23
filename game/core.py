@@ -1,8 +1,11 @@
 """
 Chinese Chess Game - Core Game Logic
 """
+import logging
 from copy import deepcopy
 from .constants import INITIAL_BOARD, PIECE_NAMES, COL_NAMES, BOARD_WIDTH, BOARD_HEIGHT
+
+logger = logging.getLogger(__name__)
 
 
 class ChessGame:
@@ -219,16 +222,34 @@ class ChessGame:
         dx, dy = to_x - from_x, to_y - from_y
         if color == 'red':
             if dy > 0:
-                return False
-            if from_y >= 5:
-                return dx == 0 and dy == -1
-            return dx == 0 and dy == -1
-        else:
-            if dy < 0:
+                logger.debug(f"PAWN REJECTED: red pawn at ({from_x},{from_y}) tried to move down to ({to_x},{to_y}), dy={dy}")
                 return False
             if from_y <= 4:
-                return dx == 0 and dy == 1
-            return dx == 0 and dy == 1
+                if (dx == 0 and dy == -1) or (abs(dx) == 1 and dy == 0):
+                    logger.debug(f"PAWN OK: red pawn crossed river at ({from_x},{from_y}) -> ({to_x},{to_y}), dx={dx}, dy={dy}")
+                    return True
+                logger.debug(f"PAWN REJECTED: red pawn crossed river at ({from_x},{from_y}) tried ({to_x},{to_y}), dx={dx}, dy={dy}, expected: forward(-1) or sideways(±1)")
+                return False
+            if dx == 0 and dy == -1:
+                logger.debug(f"PAWN OK: red pawn before river at ({from_x},{from_y}) -> ({to_x},{to_y})")
+                return True
+            logger.debug(f"PAWN REJECTED: red pawn before river at ({from_x},{from_y}) tried ({to_x},{to_y}), dx={dx}, dy={dy}, expected: forward(-1) only")
+            return False
+        else:
+            if dy < 0:
+                logger.debug(f"PAWN REJECTED: black pawn at ({from_x},{from_y}) tried to move up to ({to_x},{to_y}), dy={dy}")
+                return False
+            if from_y >= 5:
+                if (dx == 0 and dy == 1) or (abs(dx) == 1 and dy == 0):
+                    logger.debug(f"PAWN OK: black pawn crossed river at ({from_x},{from_y}) -> ({to_x},{to_y}), dx={dx}, dy={dy}")
+                    return True
+                logger.debug(f"PAWN REJECTED: black pawn crossed river at ({from_x},{from_y}) tried ({to_x},{to_y}), dx={dx}, dy={dy}, expected: forward(+1) or sideways(±1)")
+                return False
+            if dx == 0 and dy == 1:
+                logger.debug(f"PAWN OK: black pawn before river at ({from_x},{from_y}) -> ({to_x},{to_y})")
+                return True
+            logger.debug(f"PAWN REJECTED: black pawn before river at ({from_x},{from_y}) tried ({to_x},{to_y}), dx={dx}, dy={dy}, expected: forward(+1) only")
+            return False
 
     def _simulate_move(self, board, from_x, from_y, to_x, to_y):
         board_copy = deepcopy(board)
@@ -301,10 +322,17 @@ class ChessGame:
 
     def make_move(self, from_x, from_y, to_x, to_y):
         """Execute a move"""
+        logger.info(f"make_move called: ({from_x},{from_y}) -> ({to_x},{to_y}), turn={self.current_turn}, game_over={self.game_over}")
+
         if self.game_over:
+            logger.warning(f"make_move REJECTED: game already over")
             return {'success': False, 'message': '游戏已结束'}
 
+        piece = self.board[from_y][from_x]
+        logger.debug(f"make_move: piece at source = {piece}")
+
         if not self.is_valid_move(from_x, from_y, to_x, to_y):
+            logger.warning(f"make_move REJECTED: is_valid_move returned False for ({from_x},{from_y}) -> ({to_x},{to_y})")
             return {'success': False, 'message': '无效的移动'}
 
         piece = self.board[from_y][from_x]

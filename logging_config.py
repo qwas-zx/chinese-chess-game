@@ -135,12 +135,17 @@ def setup_logging(level: str | None = None, logfile: str | None = None, structur
             root.warning('Failed to create file log handler for %s: %s', logfile, e)
 
     # Apply per-module log levels
+    # Use the configured level if it's more verbose, otherwise keep module default
     for module_name, module_level in LOG_LEVELS.items():
-        logging.getLogger(f'routes.{module_name}_routes').setLevel(module_level)
+        effective_level = min(numeric_level, module_level)
+        logging.getLogger(f'routes.{module_name}_routes').setLevel(effective_level)
         if module_name in ('game', 'ai'):
-            logging.getLogger(f'game.{module_name}').setLevel(module_level)
+            logging.getLogger(f'game.{module_name}').setLevel(effective_level)
         if module_name == 'online':
-            logging.getLogger('online').setLevel(module_level)
+            logging.getLogger('online').setLevel(effective_level)
+
+    # Ensure game.core respects the root level (so DEBUG is not blocked)
+    logging.getLogger('game.core').setLevel(numeric_level)
 
     # Reduce noise from third-party libraries
     logging.getLogger('werkzeug').setLevel(logging.WARNING)
