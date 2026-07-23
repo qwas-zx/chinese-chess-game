@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>中国象棋 - 双人对战</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <nav class="top-nav">
+        <div class="nav-brand">中国象棋</div>
+        <div class="nav-links">
+            <a href="/" class="nav-link active">本地双人</a>
+            <a href="/ai" class="nav-link">人机对战</a>
+            <a href="/lobby" class="nav-link">联机大厅</a>
+            <a href="/login" id="navLoginLink" class="nav-link">登录</a>
+            <div id="navUserInfo" class="nav-user-info" style="display:none;">
+                <span class="nav-username">你好，<span id="navUsername"></span></span>
+                <button id="navLogoutBtn" class="nav-logout-btn">退出</button>
+            </div>
+        </div>
+    </nav>
+    <div class="container">
+        <h1>中国象棋</h1>
+        <div class="game-info">
+            <div class="turn-indicator">
+                当前回合：<span id="currentTurn" class="turn-red">红方</span>
+            </div>
+            <button id="resetBtn" class="action-btn">重新开始</button>
+        </div>
+
+        <div id="drawBanner" class="draw-banner" style="display:none;">
+            <span id="drawBannerText"></span>
+            <button id="acceptDrawBtn" class="action-btn small success">同意</button>
+            <button id="declineDrawBtn" class="action-btn small danger">拒绝</button>
+        </div>
+
+        <div class="board-wrapper">
+            <div id="boardContainer" class="board-container">
+                <img id="boardImage" src="/static/assets/pieces/chessboard.png" alt="中国象棋棋盘" class="board-image">
+                <div id="piecesLayer" class="pieces-layer"></div>
+                <div id="clickAreas" class="click-areas"></div>
+            </div>
+        </div>
+
+        <div class="toolbar">
+            <button id="flipBtn" class="action-btn" title="翻转棋盘">翻转</button>
+            <button id="undoBtn" class="action-btn" title="悔棋">悔棋</button>
+            <button id="drawBtn" class="action-btn" title="求和">求和</button>
+            <button id="resignBtn" class="action-btn danger" title="认输">认输</button>
+            <button id="adjustBtn" class="action-btn" title="调整棋子">调整</button>
+            <button id="exportBtn" class="action-btn" title="导出棋谱">导出</button>
+            <button id="importBtn" class="action-btn" title="导入棋谱">导入</button>
+            <input type="file" id="importFile" accept=".txt" style="display:none;">
+        </div>
+
+        <div id="adjustPanel" class="adjust-panel" style="display:none;">
+            <div class="adjust-header">
+                <span>调整棋子模式</span>
+                <span class="adjust-hint">点击棋盘空位添加，点击已有棋子删除</span>
+            </div>
+            <div class="adjust-pieces">
+                <div class="adjust-group">
+                    <span class="adjust-group-label">红方</span>
+                    <div class="adjust-pieces-row">
+                        <img class="adjust-piece" data-piece="red_帅" src="/static/assets/pieces/red_帅.png" alt="帅">
+                        <img class="adjust-piece" data-piece="red_仕" src="/static/assets/pieces/red_仕.png" alt="仕">
+                        <img class="adjust-piece" data-piece="red_相" src="/static/assets/pieces/red_相.png" alt="相">
+                        <img class="adjust-piece" data-piece="red_马" src="/static/assets/pieces/red_马.png" alt="马">
+                        <img class="adjust-piece" data-piece="red_車" src="/static/assets/pieces/red_車.png" alt="車">
+                        <img class="adjust-piece" data-piece="red_炮" src="/static/assets/pieces/red_炮.png" alt="炮">
+                        <img class="adjust-piece" data-piece="red_兵" src="/static/assets/pieces/red_兵.png" alt="兵">
+                    </div>
+                </div>
+                <div class="adjust-group">
+                    <span class="adjust-group-label">黑方</span>
+                    <div class="adjust-pieces-row">
+                        <img class="adjust-piece" data-piece="black_将" src="/static/assets/pieces/black_将.png" alt="将">
+                        <img class="adjust-piece" data-piece="black_士" src="/static/assets/pieces/black_士.png" alt="士">
+                        <img class="adjust-piece" data-piece="black_象" src="/static/assets/pieces/black_象.png" alt="象">
+                        <img class="adjust-piece" data-piece="black_马" src="/static/assets/pieces/black_马.png" alt="马">
+                        <img class="adjust-piece" data-piece="black_車" src="/static/assets/pieces/black_車.png" alt="車">
+                        <img class="adjust-piece" data-piece="black_炮" src="/static/assets/pieces/black_炮.png" alt="炮">
+                        <img class="adjust-piece" data-piece="black_卒" src="/static/assets/pieces/black_卒.png" alt="卒">
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="history-section">
+            <div class="history-header" id="historyToggle">
+                走棋记录 <span id="historyArrow">&#9660;</span>
+            </div>
+            <div id="historyList" class="history-list" style="display:none;"></div>
+        </div>
+
+        <div id="message" class="message"></div>
+    </div>
+
+    <script type="module" src="/static/js/game.js"></script>
+</body>
+</html>

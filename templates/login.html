@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>中国象棋 - 登录</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <nav class="top-nav">
+        <div class="nav-brand">中国象棋</div>
+        <div class="nav-links">
+            <a href="/" class="nav-link">本地双人</a>
+            <a href="/ai" class="nav-link">人机对战</a>
+            <a href="/lobby" class="nav-link">联机大厅</a>
+            <a href="/login" class="nav-link active">登录</a>
+        </div>
+    </nav>
+    <div class="container auth-container">
+        <h1>中国象棋</h1>
+        <p class="auth-subtitle">请先注册或登录以继续</p>
+        <div class="auth-tabs">
+            <button id="tabLogin" class="auth-tab active">登录</button>
+            <button id="tabRegister" class="auth-tab">注册</button>
+        </div>
+        <form id="authForm" class="auth-form">
+            <input type="text" id="username" class="auth-input" placeholder="用户名（2-20 字符）" autocomplete="username" required>
+            <input type="password" id="password" class="auth-input" placeholder="密码（至少 4 位）" autocomplete="current-password" required>
+            <button type="submit" id="submitBtn" class="action-btn auth-submit">登录</button>
+        </form>
+        <div id="message" class="message"></div>
+        <div class="auth-footer">
+            <a href="/lobby" class="nav-link">返回大厅</a>
+        </div>
+    </div>
+
+    <script type="module">
+        import { authLogin, authRegister } from '/static/js/modules/api.js';
+
+        let mode = 'login';
+
+        // Read redirect from query string — the page we came from.
+        function getRedirectFromUrl() {
+            const params = new URLSearchParams(window.location.search);
+            const r = params.get('redirect');
+            if (!r) return '';
+            // Only allow same-site paths.
+            if (r.startsWith('http://') || r.startsWith('https://')) return '';
+            return r;
+        }
+
+        const redirectTo = getRedirectFromUrl();
+
+        function showMessage(text, type = '') {
+            const el = document.getElementById('message');
+            el.textContent = text;
+            el.className = 'message ' + type;
+        }
+
+        function setMode(m) {
+            mode = m;
+            document.getElementById('tabLogin').classList.toggle('active', m === 'login');
+            document.getElementById('tabRegister').classList.toggle('active', m === 'register');
+            document.getElementById('submitBtn').textContent = m === 'login' ? '登录' : '注册';
+        }
+
+        document.getElementById('tabLogin').addEventListener('click', () => setMode('login'));
+        document.getElementById('tabRegister').addEventListener('click', () => setMode('register'));
+
+        document.getElementById('authForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const username = document.getElementById('username').value.trim();
+            const password = document.getElementById('password').value;
+            if (!username || !password) { showMessage('请填写用户名和密码', 'error'); return; }
+            const fn = mode === 'login' ? authLogin : authRegister;
+            const data = await fn(username, password, redirectTo);
+            if (data.success) {
+                showMessage(mode === 'login' ? '登录成功，正在跳转…' : '注册成功，正在跳转…', 'success');
+                const target = data.redirect || redirectTo || '/lobby';
+                setTimeout(() => { window.location.href = target; }, 500);
+            } else {
+                showMessage(data.message || '操作失败', 'error');
+            }
+        });
+    </script>
+</body>
+</html>

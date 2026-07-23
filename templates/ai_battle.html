@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>中国象棋 - 人机对战</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <nav class="top-nav">
+        <div class="nav-brand">中国象棋</div>
+        <div class="nav-links">
+            <a href="/" class="nav-link">本地双人</a>
+            <a href="/ai" class="nav-link active">人机对战</a>
+            <a href="/lobby" class="nav-link">联机大厅</a>
+            <a href="/login" id="navLoginLink" class="nav-link">登录</a>
+            <div id="navUserInfo" class="nav-user-info" style="display:none;">
+                <span class="nav-username">你好，<span id="navUsername"></span></span>
+                <button id="navLogoutBtn" class="nav-logout-btn">退出</button>
+            </div>
+        </div>
+    </nav>
+    <div class="container">
+        <h1>人机对战</h1>
+        <div class="game-info">
+            <div class="turn-indicator">
+                当前回合：<span id="currentTurn" class="turn-red">红方</span>
+            </div>
+            <div class="difficulty-selector">
+                <label for="difficultySelect" class="difficulty-label">难度</label>
+                <select id="difficultySelect" class="difficulty-select">
+                    <option value="easy">简单</option>
+                    <option value="normal" selected>普通</option>
+                    <option value="hard">困难</option>
+                </select>
+            </div>
+        </div>
+
+        <div id="aiThinking" class="ai-thinking" style="display:none;">
+            <span class="thinking-dot"></span>
+            <span id="thinkingText">AI 思考中…</span>
+        </div>
+
+        <div class="last-move-info" id="lastMoveInfo" style="display:none;">
+            <span class="last-move-player">你：<span id="lastPlayerMove">—</span></span>
+            <span class="last-move-ai">AI：<span id="lastAiMove">—</span></span>
+        </div>
+
+        <div class="board-wrapper">
+            <div id="boardContainer" class="board-container">
+                <img id="boardImage" src="/static/assets/pieces/chessboard.png" alt="中国象棋棋盘" class="board-image">
+                <div id="piecesLayer" class="pieces-layer"></div>
+                <div id="clickAreas" class="click-areas"></div>
+            </div>
+        </div>
+
+        <div class="toolbar">
+            <button id="resetBtn" class="action-btn">重新开始</button>
+            <button id="flipBtn" class="action-btn" title="翻转棋盘">翻转</button>
+            <button id="undoBtn" class="action-btn" title="悔棋">悔棋</button>
+            <button id="resignBtn" class="action-btn danger" title="认输">认输</button>
+        </div>
+
+        <div class="history-section">
+            <div class="history-header" id="historyToggle">
+                走棋记录 <span id="historyArrow">&#9660;</span>
+            </div>
+            <div id="historyList" class="history-list" style="display:none;"></div>
+        </div>
+
+        <div id="message" class="message"></div>
+    </div>
+
+    <script type="module" src="/static/js/ai_game.js"></script>
+</body>
+</html>

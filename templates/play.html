@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>中国象棋 - 联机对战</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <nav class="top-nav">
+        <div class="nav-brand">中国象棋</div>
+        <div class="nav-links">
+            <a href="/" class="nav-link">本地双人</a>
+            <a href="/ai" class="nav-link">人机对战</a>
+            <a href="/lobby" class="nav-link">联机大厅</a>
+            <a href="/login" id="navLoginLink" class="nav-link">登录</a>
+            <div id="navUserInfo" class="nav-user-info" style="display:none;">
+                <span class="nav-username">你好，<span id="navUsername"></span></span>
+                <button id="navLogoutBtn" class="nav-logout-btn">退出</button>
+            </div>
+            <span id="pendingIndicator" class="pending-dot" style="display:none;">同步中…</span>
+        </div>
+    </nav>
+    <div class="container">
+        <h1>中国象棋 · 联机</h1>
+        <div id="roomInfo" class="room-info">正在同步房间…</div>
+
+        <div class="game-info">
+            <div class="turn-indicator">
+                当前回合：<span id="currentTurn" class="turn-red">红方</span>
+            </div>
+        </div>
+
+        <div id="drawBanner" class="draw-banner" style="display:none;">
+            <span id="drawBannerText"></span>
+            <button id="acceptDrawBtn" class="action-btn small success">同意</button>
+            <button id="declineDrawBtn" class="action-btn small danger">拒绝</button>
+        </div>
+
+        <div class="board-wrapper">
+            <div id="boardContainer" class="board-container">
+                <img id="boardImage" src="/static/assets/pieces/chessboard.png" alt="中国象棋棋盘" class="board-image">
+                <div id="piecesLayer" class="pieces-layer"></div>
+                <div id="clickAreas" class="click-areas"></div>
+            </div>
+        </div>
+
+        <div class="toolbar">
+            <button id="flipBtn" class="action-btn" title="翻转棋盘">翻转</button>
+            <button id="drawBtn" class="action-btn" title="求和">求和</button>
+            <button id="resignBtn" class="action-btn danger" title="认输">认输</button>
+            <button id="leaveBtn" class="action-btn danger" title="离开房间">离开房间</button>
+        </div>
+
+        <div class="history-section">
+            <div class="history-header" id="historyToggle">
+                走棋记录 <span id="historyArrow">&#9660;</span>
+            </div>
+            <div id="historyList" class="history-list" style="display:none;"></div>
+        </div>
+
+        <div id="message" class="message"></div>
+    </div>
+
+    <!-- Socket.IO client served by flask-socketio -->
+    <script src="/socket.io/socket.io.js"></script>
+    <script type="module" src="/static/js/modules/online.js"></script>
+</body>
+</html>

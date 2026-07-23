@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>中国象棋 - 联机大厅</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <nav class="top-nav">
+        <div class="nav-brand">中国象棋</div>
+        <div class="nav-links">
+            <a href="/" class="nav-link">本地双人</a>
+            <a href="/ai" class="nav-link">人机对战</a>
+            <a href="/lobby" class="nav-link active">联机大厅</a>
+            <a href="/login" id="navLoginLink" class="nav-link">登录</a>
+            <div id="navUserInfo" class="nav-user-info" style="display:none;">
+                <span class="nav-username">你好，<span id="navUsername"></span></span>
+                <button id="navLogoutBtn" class="nav-logout-btn">退出</button>
+            </div>
+        </div>
+    </nav>
+    <div class="container">
+        <h1>联机大厅</h1>
+        <div id="userBar" class="user-bar">加载中…</div>
+
+        <div class="lobby-section">
+            <h2>创建房间</h2>
+            <p class="lobby-hint">创建后将获得一个房间号，分享给对手即可。</p>
+            <button id="createBtn" class="action-btn">创建新房间</button>
+        </div>
+
+        <div class="lobby-section">
+            <h2>加入房间</h2>
+            <div class="join-row">
+                <input type="text" id="joinInput" class="auth-input" placeholder="输入房间号" maxlength="10">
+                <button id="joinBtn" class="action-btn">加入</button>
+            </div>
+        </div>
+
+        <div id="currentRoom" class="lobby-section" style="display:none;">
+            <h2>当前房间</h2>
+            <div id="currentRoomInfo" class="room-info"></div>
+            <div class="lobby-actions">
+                <button id="enterBtn" class="action-btn success">进入对局</button>
+                <button id="leaveLobbyBtn" class="action-btn danger">离开房间</button>
+            </div>
+        </div>
+
+        <div id="message" class="message"></div>
+    </div>
+
+    <script type="module">
+        import { authMe, authLogout, createRoom, joinRoom, fetchMyRoom, leaveRoom }
+            from '/static/js/modules/api.js';
+        import { initNavUserInfo } from '/static/js/modules/auth_ui.js';
+
+        function showMessage(text, type = '') {
+            const el = document.getElementById('message');
+            el.textContent = text;
+            el.className = 'message ' + type;
+            if (type) setTimeout(() => {
+                if (el.textContent === text) el.className = 'message';
+            }, 2500);
+        }
+
+        async function refresh() {
+            const me = await authMe();
+            if (!me.success) { window.location.href = '/login'; return; }
+            initNavUserInfo(me.user);
+            document.getElementById('userBar').innerHTML =
+                `你好，${me.user.username} ` +
+                `<button id="logoutBtn" class="action-btn small">登出</button>`;
+            document.getElementById('logoutBtn').addEventListener('click', async () => {
+                await authLogout();
+                window.location.href = '/login';
+            });
+
+            const mine = await fetchMyRoom();
+            const cur = document.getElementById('currentRoom');
+            if (mine.success && mine.in_room) {
+                cur.style.display = 'block';
+                const color = mine.color === 'red' ? '红方' : '黑方';
+                document.getElementById('currentRoomInfo').textContent =
+                    `房间号：${mine.room_id} | 你执：${color}`;
+                document.getElementById('enterBtn').onclick = () => {
+                    window.location.href = '/play';
+                };
+                document.getElementById('leaveLobbyBtn').onclick = async () => {
+                    await leaveRoom(mine.room_id);
+                    showMessage('已离开房间');
+                    refresh();
+                };
+            } else {
+                cur.style.display = 'none';
+            }
+        }
+
+        document.getElementById('createBtn').addEventListener('click', async () => {
+            const data = await createRoom();
+            if (data.success) {
+                showMessage(`房间已创建：${data.room_id}（你执红方），正在进入…`, 'success');
+                setTimeout(() => { window.location.href = '/play'; }, 800);
+            } else {
+                showMessage(data.message || '创建失败', 'error');
+            }
+        });
+
+        document.getElementById('joinBtn').addEventListener('click', async () => {
+            const rid = document.getElementById('joinInput').value.trim();
+            if (!rid) { showMessage('请输入房间号', 'error'); return; }
+            const data = await joinRoom(rid);
+            if (data.success) {
+                showMessage('加入成功，正在进入…', 'success');
+                setTimeout(() => { window.location.href = '/play'; }, 600);
+            } else {
+                showMessage(data.message || '加入失败', 'error');
+            }
+        });
+
+        document.getElementById('joinInput').addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') document.getElementById('joinBtn').click();
+        });
+
+        refresh();
+    </script>
+</body>
+</html>
