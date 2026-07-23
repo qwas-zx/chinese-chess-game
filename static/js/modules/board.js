@@ -37,7 +37,7 @@ function getPieceImageSrc(piece) {
 /**
  * Render all pieces on the board
  */
-function renderPieces(board, flipped, selectedPiece, validMoves) {
+function renderPieces(board, flipped, selectedPiece, validMoves, lastMove) {
     const piecesLayer = document.getElementById('piecesLayer');
     piecesLayer.innerHTML = '';
 
@@ -61,18 +61,36 @@ function renderPieces(board, flipped, selectedPiece, validMoves) {
                     img.classList.add('capture-highlight');
                 }
 
+                if (lastMove) {
+                    if (lastMove.to.x === x && lastMove.to.y === y) {
+                        img.classList.add('move-to');
+                    }
+                    if (lastMove.from.x === x && lastMove.from.y === y && !piece) {
+                        img.classList.add('move-from');
+                    }
+                }
+
                 img.style.left = xPercent + '%';
                 img.style.top = yPercent + '%';
                 piecesLayer.appendChild(img);
             }
         }
     }
+
+    if (lastMove && !board[lastMove.from.y][lastMove.from.x]) {
+        const { xPercent, yPercent } = gridToPercent(lastMove.from.x, lastMove.from.y, flipped);
+        const marker = document.createElement('div');
+        marker.className = 'move-from-marker';
+        marker.style.left = xPercent + '%';
+        marker.style.top = yPercent + '%';
+        piecesLayer.appendChild(marker);
+    }
 }
 
 /**
  * Render click areas for the board
  */
-function renderClickAreas(flipped, board, validMoves) {
+function renderClickAreas(flipped, board, validMoves, lastMove) {
     const clickAreas = document.getElementById('clickAreas');
     clickAreas.innerHTML = '';
 
@@ -92,6 +110,15 @@ function renderClickAreas(flipped, board, validMoves) {
                 area.classList.add('valid-move');
                 if (board[y][x]) {
                     area.classList.add('valid-capture');
+                }
+            }
+
+            if (lastMove) {
+                if (lastMove.from.x === x && lastMove.from.y === y) {
+                    area.classList.add('last-move-from');
+                }
+                if (lastMove.to.x === x && lastMove.to.y === y) {
+                    area.classList.add('last-move-to');
                 }
             }
 

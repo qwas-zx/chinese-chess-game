@@ -267,6 +267,43 @@ h1 {
     filter: brightness(1.2) drop-shadow(0 0 4px rgba(255, 69, 0, 0.6));
 }
 
+.piece.move-to {
+    animation: moveToPulse 0.5s ease-out;
+    filter: drop-shadow(0 0 6px rgba(76, 175, 80, 0.8));
+}
+
+@keyframes moveToPulse {
+    0% {
+        filter: drop-shadow(0 0 12px rgba(76, 175, 80, 1));
+    }
+    100% {
+        filter: drop-shadow(0 0 6px rgba(76, 175, 80, 0.8));
+    }
+}
+
+.move-from-marker {
+    position: absolute;
+    width: 50px;
+    height: 50px;
+    transform: translate(-50%, -50%);
+    border-radius: 50%;
+    background-color: rgba(255, 193, 7, 0.4);
+    border: 2px dashed rgba(255, 193, 7, 0.8);
+    pointer-events: none;
+    animation: fadeIn 0.3s ease-out;
+}
+
+@keyframes fadeIn {
+    0% {
+        opacity: 0;
+        transform: translate(-50%, -50%) scale(0.5);
+    }
+    100% {
+        opacity: 1;
+        transform: translate(-50%, -50%) scale(1);
+    }
+}
+
 .click-areas {
     position: absolute;
     top: 0;

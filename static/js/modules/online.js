@@ -273,8 +273,11 @@ function updatePendingIndicator() {
 }
 
 function render() {
-    renderPieces(state.board, state.flipped, selectedPiece, validMoves);
-    renderClickAreas(state.flipped, state.board, validMoves);
+    const lastMove = state.moveHistory.length > 0 
+        ? state.moveHistory[state.moveHistory.length - 1] 
+        : null;
+    renderPieces(state.board, state.flipped, selectedPiece, validMoves, lastMove);
+    renderClickAreas(state.flipped, state.board, validMoves, lastMove);
     updateTurnDisplay();
     updateDrawBanner();
     updateHistoryList();

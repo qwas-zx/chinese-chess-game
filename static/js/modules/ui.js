@@ -124,8 +124,11 @@ function updateHistoryList() {
  * Main render function
  */
 function render() {
-    renderPieces(gameState.board, gameState.flipped, selectedPiece, validMoves);
-    renderClickAreas(gameState.flipped, gameState.board, validMoves);
+    const lastMove = gameState.moveHistory.length > 0 
+        ? gameState.moveHistory[gameState.moveHistory.length - 1] 
+        : null;
+    renderPieces(gameState.board, gameState.flipped, selectedPiece, validMoves, lastMove);
+    renderClickAreas(gameState.flipped, gameState.board, validMoves, lastMove);
     updateTurnDisplay();
     updateDrawBanner();
     updateHistoryList();
