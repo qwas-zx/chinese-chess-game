@@ -3,6 +3,7 @@
  * Handles UI updates, event handling, and game state management
  */
 import { renderPieces, renderClickAreas } from './board.js';
+import { ChessGame } from './game_logic.js';
 import {
     fetchGameState,
     fetchValidMoves,
