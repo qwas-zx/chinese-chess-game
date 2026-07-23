@@ -165,16 +165,16 @@ class ChessGame:
 
     def _validate_king(self, from_x, from_y, to_x, to_y, color, board=None):
         board = self.board if board is None else board
-        if not self.is_in_palace(to_x, to_y, color):
-            return False
         dx, dy = abs(to_x - from_x), abs(to_y - from_y)
-        if (dx == 1 and dy == 0) or (dx == 0 and dy == 1):
-            return True
+        # 飞将吃帅：两王同列且中间无子时可直接吃对方将/帅
         if dx == 0:
             target = board[to_y][to_x]
             if target and self.get_piece_type(target) in ('帅', '将'):
                 return self.count_pieces_between(from_x, from_y, to_x, to_y, board) == 0
-        return False
+        # 普通走法：目标必须在九宫内，且只能直走一格
+        if not self.is_in_palace(to_x, to_y, color):
+            return False
+        return (dx == 1 and dy == 0) or (dx == 0 and dy == 1)
 
     def _validate_advisor(self, from_x, from_y, to_x, to_y, color, board=None):
         if not self.is_in_palace(to_x, to_y, color):
@@ -259,6 +259,12 @@ class ChessGame:
         return board_copy
 
     def _would_leave_king_in_check(self, board, from_x, from_y, to_x, to_y, color):
+        # 吃掉对方将/帅的走法始终合法——吃王即获胜，不存在"自杀"问题
+        target = board[to_y][to_x]
+        if target is not None:
+            target_type = self.get_piece_type(target)
+            if target_type in ('帅', '将') and self.get_piece_color(target) != color:
+                return False
         board_after = self._simulate_move(board, from_x, from_y, to_x, to_y)
         return self.is_in_check(color, board_after)
 
@@ -270,11 +276,34 @@ class ChessGame:
                     return x, y
         return None
 
+    def _kings_face_each_other(self, board):
+        """检查两王是否同列且中间无子（飞将照面状态）。
+
+        在中国象棋中，两将帅不能在同一直线上直接对面。出现这种
+        状态即视为违规（相当于自己的将暴露给对方将的攻击）。
+        """
+        red_king = self._find_king_position(board, 'red')
+        black_king = self._find_king_position(board, 'black')
+        if red_king is None or black_king is None:
+            return False
+        if red_king[0] != black_king[0]:
+            return False
+        x = red_king[0]
+        y1, y2 = sorted([red_king[1], black_king[1]])
+        for y in range(y1 + 1, y2):
+            if board[y][x] is not None:
+                return False
+        return True
+
     def is_in_check(self, color, board=None):
         board = self.board if board is None else board
         king_position = self._find_king_position(board, color)
         if king_position is None:
             return False
+
+        # 飞将照面：两王同列且中间无子，视为被将军
+        if self._kings_face_each_other(board):
+            return True
 
         king_x, king_y = king_position
         for y in range(10):
@@ -360,15 +389,26 @@ class ChessGame:
         self.draw_requested_by = None
 
         status_message = ''
+        check_flag = False
+        checkmate_flag = False
         if not self.game_over:
             opponent_color = self.current_turn
             if self.is_in_check(opponent_color):
+                check_flag = True
                 if self.is_checkmate(opponent_color):
                     self.game_over = True
                     self.winner = moving_color
                     status_message = '绝杀！'
+                    checkmate_flag = True
                 else:
                     status_message = '将军！'
+            else:
+                # 困毙：对方未被将军但无子可动，按象棋规则判负
+                if not self.get_legal_moves(opponent_color):
+                    self.game_over = True
+                    self.winner = moving_color
+                    status_message = '困毙！'
+                    checkmate_flag = True
 
         return {
             'success': True,
@@ -380,8 +420,8 @@ class ChessGame:
             'move_description': move_desc,
             'move_history': self.move_history,
             'message': status_message or None,
-            'check': bool(status_message),
-            'checkmate': status_message == '绝杀！'
+            'check': check_flag,
+            'checkmate': checkmate_flag
         }
 
     def undo(self):
