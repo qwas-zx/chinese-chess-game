@@ -2,7 +2,9 @@
 
 一个基于 Python + Flask + SocketIO 的中国象棋 Web 应用，支持**本地双人对战**、**人机对战**和**在线联机对战**三种模式。所有模式均需先注册/登录后使用，每位用户拥有独立的棋局状态。
 
-![演示截图](example.png)
+![演示截图](static/assets/other/example.png)
+
+![程序图标](static/assets/other/favicon.png)
 
 ---
 
@@ -60,7 +62,6 @@ chinese-chess-game/
 ├── logging_config.py           # 日志配置
 ├── requirements.txt            # Python 依赖列表
 ├── LICENSE                     # MIT 协议
-├── example.png                 # 演示截图
 │
 ├── game/                       # 核心象棋逻辑
 │   ├── __init__.py
@@ -84,7 +85,12 @@ chinese-chess-game/
 │   └── ws_routes.py            # WebSocket 事件处理（需登录）
 │
 ├── static/                     # 静态资源
-│   ├── assets/pieces/          # 棋子 PNG 图片（红/黑双方各 7 种）
+│   ├── assets/
+│   │   ├── pieces/             # 棋子 PNG 图片（红/黑双方各 7 种）
+│   │   └── other/              # 其他图片资源
+│   │       ├── example.png     # 演示截图
+│   │       ├── favicon.ico     # 网站图标
+│   │       └── favicon.png     # 图标图片（文档演示用）
 │   ├── css/style.css           # 样式表（棋盘、棋子、UI 组件）
 │   └── js/                     # 前端脚本
 │       ├── game.js             # 本地对战入口（初始化 + 事件绑定）
