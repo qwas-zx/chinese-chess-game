@@ -2,7 +2,7 @@
  * Online Module — SocketIO client + three-step protocol + play page UI.
  *
  * Mirrors the backend protocol in ws_routes.py:
- *   - State-changing ops (MOVE/RESIGN/DRAW star RESTART) are wrapped in
+ *   - State-changing ops (MOVE/RESIGN/DRAW*/RESTART) are wrapped in
  *     {msg_id, room_id, type, seq, payload, timestamp}. The client sends,
  *     waits for ACK (3s timeout, 3 retries with the SAME msg_id so the
  *     server dedups). The server then broadcasts STATE_UPDATE.
