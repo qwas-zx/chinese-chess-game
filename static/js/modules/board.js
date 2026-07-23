@@ -36,9 +36,13 @@ function getPieceImageSrc(piece) {
 
 /**
  * Render all pieces on the board
+ * @param {string|HTMLElement} [container] - 可选的容器元素或 ID（推演棋盘用），默认 'piecesLayer'
  */
-function renderPieces(board, flipped, selectedPiece, validMoves, lastMove) {
-    const piecesLayer = document.getElementById('piecesLayer');
+function renderPieces(board, flipped, selectedPiece, validMoves, lastMove, container) {
+    const piecesLayer = typeof container === 'string'
+        ? document.getElementById(container)
+        : (container || document.getElementById('piecesLayer'));
+    if (!piecesLayer) return;
     piecesLayer.innerHTML = '';
 
     for (let y = 0; y < 10; y++) {
@@ -89,9 +93,13 @@ function renderPieces(board, flipped, selectedPiece, validMoves, lastMove) {
 
 /**
  * Render click areas for the board
+ * @param {string|HTMLElement} [container] - 可选的容器元素或 ID（推演棋盘用），默认 'clickAreas'
  */
-function renderClickAreas(flipped, board, validMoves, lastMove) {
-    const clickAreas = document.getElementById('clickAreas');
+function renderClickAreas(flipped, board, validMoves, lastMove, container) {
+    const clickAreas = typeof container === 'string'
+        ? document.getElementById(container)
+        : (container || document.getElementById('clickAreas'));
+    if (!clickAreas) return;
     clickAreas.innerHTML = '';
 
     for (let y = 0; y < 10; y++) {

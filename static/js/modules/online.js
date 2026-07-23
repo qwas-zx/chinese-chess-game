@@ -17,6 +17,7 @@ import { renderPieces, renderClickAreas } from './board.js';
 import { ChessGame } from './game_logic.js';
 import { fetchMyRoom, leaveRoom, authMe } from './api.js';
 import { initNavUserInfo } from './auth_ui.js';
+import { openDeduce, resetToState, isActive as deduceActive } from './deduce.js';
 
 const socket = window.io({ transports: ['websocket'] });
 
@@ -489,6 +490,24 @@ function handleReplay() {
     updateReplayUI();
 }
 
+/**
+ * 开启/同步推演：从当前真实局势复制到推演棋盘。
+ * 联机模式下推演完全在本地进行，不发送任何 socket 消息，仅自己可见。
+ */
+function handleDeduce() {
+    if (!state.board || state.board.length === 0) {
+        showMessage('棋盘尚未加载', 'error');
+        return;
+    }
+    if (deduceActive()) {
+        resetToState(state.board, state.currentTurn, state.flipped);
+        showMessage('推演已同步到当前局势', '');
+    } else {
+        openDeduce(state.board, state.currentTurn, state.flipped);
+        showMessage('推演模式已开启（仅你可见）', '');
+    }
+}
+
 function replayToStep(step) {
     const maxStep = state.moveHistory.length;
     replayStep = Math.max(0, Math.min(step, maxStep));
@@ -567,6 +586,12 @@ async function initOnlineGame() {
     document.getElementById('replayPrevBtn').addEventListener('click', () => replayToStep(replayStep - 1));
     document.getElementById('replayNextBtn').addEventListener('click', () => replayToStep(replayStep + 1));
     document.getElementById('replayLastBtn').addEventListener('click', () => replayToStep(state.moveHistory.length));
+
+    // 推演：完全本地，不发送任何 socket 消息，仅自己可见
+    document.getElementById('deduceBtn').addEventListener('click', handleDeduce);
+    document.addEventListener('deduce:reset-request', () => {
+        resetToState(state.board, state.currentTurn, state.flipped);
+    });
 
     // Recover authoritative state from server (page load / refresh).
     const mine = await fetchMyRoom();

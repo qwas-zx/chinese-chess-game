@@ -18,6 +18,7 @@ import {
     analyzeGame,
     reviewGame
 } from './api.js';
+import { openDeduce, resetToState, isActive as deduceActive } from './deduce.js';
 
 // Game state
 const gameState = {
@@ -536,6 +537,30 @@ function initEventListeners() {
     document.getElementById('replayPrevBtn').addEventListener('click', () => replayToStep(replayStep - 1));
     document.getElementById('replayNextBtn').addEventListener('click', () => replayToStep(replayStep + 1));
     document.getElementById('replayLastBtn').addEventListener('click', () => replayToStep(gameState.moveHistory.length));
+
+    document.getElementById('deduceBtn').addEventListener('click', handleDeduce);
+    // 推演"回到当前"时，用真实棋盘状态重置推演
+    document.addEventListener('deduce:reset-request', () => {
+        resetToState(gameState.board, gameState.currentTurn, gameState.flipped);
+    });
+}
+
+/**
+ * 开启/关闭推演：从当前真实局势复制到推演棋盘。
+ */
+function handleDeduce() {
+    if (!gameState.board || gameState.board.length === 0) {
+        showMessage('棋盘尚未加载', 'error');
+        return;
+    }
+    if (deduceActive()) {
+        // 已开启时，点击按钮重新同步当前局势
+        resetToState(gameState.board, gameState.currentTurn, gameState.flipped);
+        showMessage('推演已同步到当前局势', '');
+    } else {
+        openDeduce(gameState.board, gameState.currentTurn, gameState.flipped);
+        showMessage('推演模式已开启', '');
+    }
 }
 
 let replayStep = 0;

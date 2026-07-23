@@ -20,6 +20,7 @@ import {
     analyzeAiGame,
     reviewAiGame,
 } from './api.js';
+import { openDeduce, resetToState, isActive as deduceActive } from './deduce.js';
 
 // ---------- game state ----------
 
@@ -501,6 +502,28 @@ function initEventListeners() {
     document.getElementById('replayPrevBtn').addEventListener('click', () => replayToStep(replayStep - 1));
     document.getElementById('replayNextBtn').addEventListener('click', () => replayToStep(replayStep + 1));
     document.getElementById('replayLastBtn').addEventListener('click', () => replayToStep(gameState.moveHistory.length));
+
+    document.getElementById('deduceBtn').addEventListener('click', handleDeduce);
+    document.addEventListener('deduce:reset-request', () => {
+        resetToState(gameState.board, gameState.currentTurn, gameState.flipped);
+    });
+}
+
+/**
+ * 开启/同步推演：从当前真实局势复制到推演棋盘。
+ */
+function handleDeduce() {
+    if (!gameState.board || gameState.board.length === 0) {
+        showMessage('棋盘尚未加载', 'error');
+        return;
+    }
+    if (deduceActive()) {
+        resetToState(gameState.board, gameState.currentTurn, gameState.flipped);
+        showMessage('推演已同步到当前局势', '');
+    } else {
+        openDeduce(gameState.board, gameState.currentTurn, gameState.flipped);
+        showMessage('推演模式已开启', '');
+    }
 }
 
 function initAiBattle() {
