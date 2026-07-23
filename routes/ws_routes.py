@@ -186,6 +186,24 @@ def register_ws_handlers(socketio):
             emit('info', {'message': '已离开房间'})
             return
 
+        if mtype == 'CHAT':
+            room = room_manager.get_room_of_user(uid)
+            if room is None:
+                emit('error', build_error('你不在任何房间'))
+                return
+            text = payload.get('text', '').strip()
+            if not text or len(text) > 200:
+                return
+            player = room.get_player(uid)
+            sender_color = player.color if player else None
+            socketio.emit('chat', {
+                'room_id': room.room_id,
+                'sender': sender_color,
+                'text': text,
+                'timestamp': int(time.time()),
+            }, room=room.room_id)
+            return
+
         # ----- state-changing messages: three-step protocol -----
         if mtype in STATE_CHANGING_TYPES:
             # Resolve room from CONNECTION, not from msg.room_id.

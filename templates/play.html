@@ -50,6 +50,11 @@
             <button id="drawBtn" class="action-btn" title="求和">求和</button>
             <button id="resignBtn" class="action-btn danger" title="认输">认输</button>
             <button id="leaveBtn" class="action-btn danger" title="离开房间">离开房间</button>
+            
+            <div class="toolbar-divider"></div>
+            
+            <button id="replayBtn" class="action-btn" title="回顾走棋">回顾</button>
+            <button id="chatBtn" class="action-btn" title="聊天">聊天</button>
         </div>
 
         <div class="history-section">
@@ -60,6 +65,37 @@
         </div>
 
         <div id="message" class="message"></div>
+
+        <div id="chatPanel" class="chat-panel" style="display:none;">
+            <div class="chat-header">
+                <span>聊天</span>
+                <button id="closeChatBtn" class="close-btn">×</button>
+            </div>
+            <div class="chat-content">
+                <div id="chatMessages" class="chat-messages"></div>
+                <div class="chat-input-area">
+                    <input type="text" id="chatInput" class="chat-input" placeholder="输入消息…" maxlength="200">
+                    <button id="sendChatBtn" class="chat-send-btn">发送</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="replayPanel" class="replay-panel" style="display:none;">
+            <div class="replay-header">
+                <span>走棋回顾</span>
+                <button id="closeReplayBtn" class="close-btn">×</button>
+            </div>
+            <div class="replay-content">
+                <div class="replay-controls">
+                    <button id="replayFirstBtn" class="replay-btn">⏮</button>
+                    <button id="replayPrevBtn" class="replay-btn">⏪</button>
+                    <span id="replayPosition" class="replay-position">1 / 1</span>
+                    <button id="replayNextBtn" class="replay-btn">⏩</button>
+                    <button id="replayLastBtn" class="replay-btn">⏭</button>
+                </div>
+                <div id="replayList" class="replay-list"></div>
+            </div>
+        </div>
     </div>
 
     <!-- Socket.IO client (local copy — flask-socketio 5.x no longer serves /socket.io/socket.io.js correctly) -->

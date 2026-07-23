@@ -73,6 +73,14 @@ async function importGame(saveData) {
     return apiCall('/api/import', 'POST', saveData);
 }
 
+async function analyzeGame() {
+    return apiCall('/api/analyze', 'POST');
+}
+
+async function reviewGame() {
+    return apiCall('/api/review', 'POST');
+}
+
 // ========== Auth API ==========
 
 async function authRegister(username, password, redirect = '') {
@@ -128,6 +136,18 @@ async function flipAiBoard() {
     return apiCall('/api/ai/flip', 'POST');
 }
 
+async function aiDraw() {
+    return apiCall('/api/ai/draw', 'POST');
+}
+
+async function analyzeAiGame() {
+    return apiCall('/api/ai/analyze', 'POST');
+}
+
+async function reviewAiGame() {
+    return apiCall('/api/ai/review', 'POST');
+}
+
 // ========== Online room API (control plane) ==========
 
 async function createRoom() {
@@ -156,12 +176,14 @@ export {
     fetchGameState, fetchValidMoves, makeMove,
     resetGame, undoMove, flipBoard, resignGame,
     drawAction, adjustPiece, importGame,
+    analyzeGame, reviewGame,
     // auth
     authRegister, authLogin, authLogout, authMe,
     // AI battle
     fetchAiState, fetchAiValidMoves, makeAiMove,
     resetAiGame, setAiDifficulty, undoAiMove,
-    resignAiGame, flipAiBoard,
+    resignAiGame, flipAiBoard, aiDraw,
+    analyzeAiGame, reviewAiGame,
     // online rooms
     createRoom, joinRoom, fetchRoom, leaveRoom, fetchMyRoom,
 };

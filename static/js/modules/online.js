@@ -14,6 +14,7 @@
  *     (HTTP /api/online/my-room) — the frontend holds no authoritative state.
  */
 import { renderPieces, renderClickAreas } from './board.js';
+import { ChessGame } from './game_logic.js';
 import { fetchMyRoom, leaveRoom, authMe } from './api.js';
 import { initNavUserInfo } from './auth_ui.js';
 
@@ -56,6 +57,12 @@ function uuid() {
 }
 
 function nowMs() { return Date.now(); }
+
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
 
 function buildMessage(type, payload = {}) {
     return {
@@ -137,6 +144,13 @@ function sendRestart() {
     const msg = buildMessage('RESTART_REQUEST');
     trackPending(msg);
     sendMessage(msg);
+}
+
+function sendChat(text) {
+    sendMessage({
+        msg_id: uuid(), room_id: state.roomId, sender: state.myColor,
+        type: 'CHAT', seq: null, payload: { text }, timestamp: nowMs(),
+    });
 }
 
 function sendJoin() {
@@ -392,6 +406,20 @@ function wireSocket() {
         updateRoomInfo();
     });
 
+    socket.on('chat', (data) => {
+        const chatPanel = document.getElementById('chatPanel');
+        const chatMessages = document.getElementById('chatMessages');
+        const player = Object.values(state.players).find(p => p.color === data.sender);
+        const name = player ? player.username : (data.sender === 'red' ? '红方' : '黑方');
+        const isMe = data.sender === state.myColor;
+        
+        const msgDiv = document.createElement('div');
+        msgDiv.className = `chat-message ${isMe ? 'chat-me' : 'chat-other'}`;
+        msgDiv.innerHTML = `<span class="chat-name">${name}:</span><span class="chat-text">${escapeHtml(data.text)}</span>`;
+        chatMessages.appendChild(msgDiv);
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+    });
+
     socket.on('force_disconnect', (data) => {
         showMessage(data.reason || '账号在其他地方登录', 'error');
         stopHeartbeat();
@@ -438,6 +466,62 @@ function handleFlipToggle() {
     render();
 }
 
+let replayStep = 0;
+
+function handleChat() {
+    const panel = document.getElementById('chatPanel');
+    panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+}
+
+function handleSendChat() {
+    const input = document.getElementById('chatInput');
+    const text = input.value.trim();
+    if (text) {
+        sendChat(text);
+        input.value = '';
+    }
+}
+
+function handleReplay() {
+    const panel = document.getElementById('replayPanel');
+    panel.style.display = 'block';
+    replayStep = state.moveHistory.length;
+    updateReplayUI();
+}
+
+function replayToStep(step) {
+    const maxStep = state.moveHistory.length;
+    replayStep = Math.max(0, Math.min(step, maxStep));
+    updateReplayUI();
+    
+    const g = new ChessGame();
+    for (let i = 0; i < replayStep; i++) {
+        const move = state.moveHistory[i];
+        g.make_move(move.from_x, move.from_y, move.to_x, move.to_y);
+    }
+    
+    renderPieces(g.board, state.flipped, null, [], replayStep > 0 ? state.moveHistory[replayStep - 1] : null);
+    renderClickAreas(state.flipped, g.board, [], replayStep > 0 ? state.moveHistory[replayStep - 1] : null);
+}
+
+function updateReplayUI() {
+    const maxStep = state.moveHistory.length;
+    document.getElementById('replayPosition').textContent = `${replayStep} / ${maxStep}`;
+    
+    let html = '';
+    for (let i = 0; i < maxStep; i++) {
+        const move = state.moveHistory[i];
+        const colorText = move.color === 'red' ? '红' : '黑';
+        const isCurrent = i === replayStep - 1;
+        html += `<div class="replay-row ${isCurrent ? 'replay-current' : ''}" data-step="${i + 1}" onclick="replayToStep(${i + 1})">
+            <span class="replay-num">${i + 1}.</span>
+            <span class="replay-color">${colorText}</span>
+            <span class="replay-desc">${move.description}</span>
+        </div>`;
+    }
+    document.getElementById('replayList').innerHTML = html || '<div class="replay-empty">暂无记录</div>';
+}
+
 // ---------- init ----------
 
 async function initOnlineGame() {
@@ -465,6 +549,24 @@ async function initOnlineGame() {
         list.style.display = visible ? 'none' : 'block';
         arrow.innerHTML = visible ? '&#9660;' : '&#9650;';
     });
+
+    document.getElementById('chatBtn').addEventListener('click', handleChat);
+    document.getElementById('closeChatBtn').addEventListener('click', () => {
+        document.getElementById('chatPanel').style.display = 'none';
+    });
+    document.getElementById('sendChatBtn').addEventListener('click', handleSendChat);
+    document.getElementById('chatInput').addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') handleSendChat();
+    });
+
+    document.getElementById('replayBtn').addEventListener('click', handleReplay);
+    document.getElementById('closeReplayBtn').addEventListener('click', () => {
+        document.getElementById('replayPanel').style.display = 'none';
+    });
+    document.getElementById('replayFirstBtn').addEventListener('click', () => replayToStep(0));
+    document.getElementById('replayPrevBtn').addEventListener('click', () => replayToStep(replayStep - 1));
+    document.getElementById('replayNextBtn').addEventListener('click', () => replayToStep(replayStep + 1));
+    document.getElementById('replayLastBtn').addEventListener('click', () => replayToStep(state.moveHistory.length));
 
     // Recover authoritative state from server (page load / refresh).
     const mine = await fetchMyRoom();

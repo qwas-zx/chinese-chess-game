@@ -264,3 +264,132 @@ def register_ai_routes(app):
         if err:
             return err
         return jsonify(g.flip())
+
+    @app.route('/api/ai/draw', methods=['POST'])
+    def ai_draw():
+        g, ai, err = _user_ai_game()
+        if err:
+            return err
+        if g.game_over:
+            return jsonify({'success': False, 'message': '游戏已结束'})
+        if g.current_turn != PLAYER_COLOR:
+            return jsonify({'success': False, 'message': '请等待 AI 走棋'})
+        if g.draw_requested_by:
+            return jsonify({'success': False, 'message': '已经请求过求和'})
+        g.draw_requested_by = PLAYER_COLOR
+        return jsonify({
+            'success': True,
+            'message': '已请求求和，等待 AI 回应',
+            'draw_requested_by': g.draw_requested_by
+        })
+
+    @app.route('/api/ai/analyze', methods=['POST'])
+    def ai_analyze():
+        g, ai, err = _user_ai_game()
+        if err:
+            return err
+        if g.game_over:
+            return jsonify({'success': False, 'message': '游戏已结束'})
+        if g.current_turn != PLAYER_COLOR:
+            return jsonify({'success': False, 'message': '请等待 AI 走棋'})
+        
+        import time
+        start_time = time.time()
+        move = ai.choose_move(g.board, PLAYER_COLOR)
+        duration_ms = int((time.time() - start_time) * 1000)
+        
+        if move is None:
+            return jsonify({'success': False, 'message': '无法分析'})
+        
+        fx, fy, tx, ty = move
+        piece = g.board[fy][fx]
+        piece_name = piece.split('_')[1] if piece else ''
+        
+        return jsonify({
+            'success': True,
+            'recommendation': {
+                'from_x': fx, 'from_y': fy,
+                'to_x': tx, 'to_y': ty,
+                'piece': piece_name,
+                'description': _format_move(fx, fy, tx, ty, piece_name)
+            },
+            'evaluation': ai._evaluate(g.board),
+            'duration_ms': duration_ms
+        })
+
+    @app.route('/api/ai/review', methods=['POST'])
+    def ai_review():
+        g, ai, err = _user_ai_game()
+        if err:
+            return err
+        
+        from game.ai import ChessAI
+        review_ai = ChessAI(color='red', difficulty='hard')
+        
+        history = g.move_history
+        reviews = []
+        sim = ChessGame()
+        
+        for i, move_record in enumerate(history):
+            fx = move_record.get('from_x')
+            fy = move_record.get('from_y')
+            tx = move_record.get('to_x')
+            ty = move_record.get('to_y')
+            desc = move_record.get('description')
+            color = move_record.get('color')
+            
+            if None in (fx, fy, tx, ty):
+                continue
+            
+            sim.current_turn = color
+            before_score = review_ai._evaluate(sim.board)
+            
+            best_move = review_ai.choose_move(sim.board, color)
+            best_score = -float('inf')
+            if best_move:
+                sim2 = ChessGame()
+                sim2.board = [row[:] for row in sim.board]
+                sim2.board[best_move[3]][best_move[2]] = sim2.board[best_move[1]][best_move[0]]
+                sim2.board[best_move[1]][best_move[0]] = None
+                best_score = review_ai._evaluate(sim2.board)
+            
+            sim.make_move(fx, fy, tx, ty)
+            after_score = review_ai._evaluate(sim.board)
+            
+            score_diff = after_score - before_score
+            best_diff = best_score - before_score
+            
+            quality = 'good'
+            comment = '合理走法'
+            if score_diff < -50:
+                quality = 'bad'
+                comment = '不太好的走法'
+            elif best_diff - score_diff > 100:
+                quality = 'miss'
+                comment = '错失更好的走法'
+            elif score_diff > 100:
+                quality = 'excellent'
+                comment = '精彩的走法'
+            
+            reviews.append({
+                'move_number': i + 1,
+                'color': color,
+                'description': desc,
+                'quality': quality,
+                'comment': comment,
+                'score_diff': score_diff,
+                'best_score_diff': best_diff
+            })
+        
+        return jsonify({'success': True, 'reviews': reviews})
+
+def _format_move(fx, fy, tx, ty, piece_name):
+    col_names = '九八七六五四三二一'
+    row_names_red = '一二三四五六七八九'
+    
+    col_from = col_names[fx]
+    col_to = col_names[tx]
+    row_from = row_names_red[9 - fy]
+    row_to = row_names_red[9 - ty]
+    
+    return f'{piece_name}{col_from}{row_from}→{col_to}{row_to}'

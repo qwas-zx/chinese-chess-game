@@ -58,7 +58,14 @@
             <button id="resetBtn" class="action-btn">重新开始</button>
             <button id="flipBtn" class="action-btn" title="翻转棋盘">翻转</button>
             <button id="undoBtn" class="action-btn" title="悔棋">悔棋</button>
+            <button id="drawBtn" class="action-btn" title="求和">求和</button>
             <button id="resignBtn" class="action-btn danger" title="认输">认输</button>
+            
+            <div class="toolbar-divider"></div>
+            
+            <button id="analyzeBtn" class="action-btn" title="AI分析当前局面">提示</button>
+            <button id="reviewBtn" class="action-btn" title="复盘分析">复盘</button>
+            <button id="replayBtn" class="action-btn" title="回顾走棋">回顾</button>
         </div>
 
         <div class="history-section">
@@ -69,6 +76,56 @@
         </div>
 
         <div id="message" class="message"></div>
+
+        <div id="analyzePanel" class="analyze-panel" style="display:none;">
+            <div class="analyze-header">
+                <span>AI 分析</span>
+                <button id="closeAnalyzeBtn" class="close-btn">×</button>
+            </div>
+            <div class="analyze-content">
+                <div id="analyzeLoading" class="analyze-loading">分析中…</div>
+                <div id="analyzeResult" class="analyze-result" style="display:none;">
+                    <div class="analyze-recommendation">
+                        <span class="analyze-label">推荐走法：</span>
+                        <span id="analyzeDesc" class="analyze-desc"></span>
+                    </div>
+                    <div class="analyze-evaluation">
+                        <span class="analyze-label">局面评估：</span>
+                        <span id="analyzeScore" class="analyze-score"></span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="reviewPanel" class="review-panel" style="display:none;">
+            <div class="review-header">
+                <span>复盘分析</span>
+                <button id="closeReviewBtn" class="close-btn">×</button>
+            </div>
+            <div class="review-content">
+                <div id="reviewLoading" class="review-loading">分析中…</div>
+                <div id="reviewResult" class="review-result" style="display:none;">
+                    <div id="reviewList" class="review-list"></div>
+                </div>
+            </div>
+        </div>
+
+        <div id="replayPanel" class="replay-panel" style="display:none;">
+            <div class="replay-header">
+                <span>走棋回顾</span>
+                <button id="closeReplayBtn" class="close-btn">×</button>
+            </div>
+            <div class="replay-content">
+                <div class="replay-controls">
+                    <button id="replayFirstBtn" class="replay-btn">⏮</button>
+                    <button id="replayPrevBtn" class="replay-btn">⏪</button>
+                    <span id="replayPosition" class="replay-position">1 / 1</span>
+                    <button id="replayNextBtn" class="replay-btn">⏩</button>
+                    <button id="replayLastBtn" class="replay-btn">⏭</button>
+                </div>
+                <div id="replayList" class="replay-list"></div>
+            </div>
+        </div>
     </div>
 
     <script type="module" src="/static/js/ai_game.js"></script>

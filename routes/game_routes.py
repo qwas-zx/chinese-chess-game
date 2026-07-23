@@ -205,3 +205,108 @@ def register_routes(app):
         if g.import_state(board, current_turn, move_history):
             return jsonify({'success': True, **_state_payload(g)})
         return jsonify({'success': False, 'message': '导入数据无效'})
+
+    @app.route('/api/analyze', methods=['POST'])
+    def analyze():
+        g, err = _user_game()
+        if err:
+            return err
+        from game.ai import ChessAI
+        ai = ChessAI(color=g.current_turn, difficulty='hard')
+        
+        move = ai.choose_move(g.board, g.current_turn)
+        if move is None:
+            return jsonify({'success': False, 'message': '无法分析'})
+        
+        fx, fy, tx, ty = move
+        piece = g.board[fy][fx]
+        piece_name = piece.split('_')[1] if piece else ''
+        
+        return jsonify({
+            'success': True,
+            'recommendation': {
+                'from_x': fx, 'from_y': fy,
+                'to_x': tx, 'to_y': ty,
+                'piece': piece_name,
+                'description': _format_move(fx, fy, tx, ty, piece_name)
+            },
+            'evaluation': ai._evaluate(g.board)
+        })
+
+    @app.route('/api/review', methods=['POST'])
+    def review():
+        g, err = _user_game()
+        if err:
+            return err
+        from game.ai import ChessAI
+        from game.core import ChessGame
+        ai = ChessAI(color='red', difficulty='hard')
+        
+        history = g.move_history
+        reviews = []
+        sim = ChessGame()
+        
+        for i, move_record in enumerate(history):
+            fx = move_record.get('from_x')
+            fy = move_record.get('from_y')
+            tx = move_record.get('to_x')
+            ty = move_record.get('to_y')
+            desc = move_record.get('description')
+            color = move_record.get('color')
+            
+            if None in (fx, fy, tx, ty):
+                continue
+            
+            sim.current_turn = color
+            before_score = ai._evaluate(sim.board)
+            
+            best_move = ai.choose_move(sim.board, color)
+            best_score = -float('inf')
+            if best_move:
+                sim2 = ChessGame()
+                sim2.board = [row[:] for row in sim.board]
+                sim2.board[best_move[3]][best_move[2]] = sim2.board[best_move[1]][best_move[0]]
+                sim2.board[best_move[1]][best_move[0]] = None
+                best_score = ai._evaluate(sim2.board)
+            
+            sim.make_move(fx, fy, tx, ty)
+            after_score = ai._evaluate(sim.board)
+            
+            score_diff = after_score - before_score
+            best_diff = best_score - before_score
+            
+            quality = 'good'
+            comment = '合理走法'
+            if score_diff < -50:
+                quality = 'bad'
+                comment = '不太好的走法'
+            elif best_diff - score_diff > 100:
+                quality = 'miss'
+                comment = '错失更好的走法'
+            elif score_diff > 100:
+                quality = 'excellent'
+                comment = '精彩的走法'
+            
+            reviews.append({
+                'move_number': i + 1,
+                'color': color,
+                'description': desc,
+                'quality': quality,
+                'comment': comment,
+                'score_diff': score_diff,
+                'best_score_diff': best_diff
+            })
+        
+        return jsonify({'success': True, 'reviews': reviews})
+
+def _format_move(fx, fy, tx, ty, piece_name):
+    col_names = '九八七六五四三二一'
+    row_names_red = '一二三四五六七八九'
+    row_names_black = '九八七六五四三二一'
+    
+    col_from = col_names[fx]
+    col_to = col_names[tx]
+    row_from = row_names_red[8 - fy]
+    row_to = row_names_red[8 - ty]
+    
+    return f'{piece_name}{col_from}{row_from}→{col_to}{row_to}'

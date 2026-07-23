@@ -6,6 +6,7 @@
  * AI has responded, so the client never needs to poll or wait.
  */
 import { renderPieces, renderClickAreas } from './board.js';
+import { ChessGame } from './game_logic.js';
 import {
     fetchAiState,
     fetchAiValidMoves,
@@ -15,6 +16,9 @@ import {
     undoAiMove,
     resignAiGame,
     flipAiBoard,
+    aiDraw,
+    analyzeAiGame,
+    reviewAiGame,
 } from './api.js';
 
 // ---------- game state ----------
@@ -310,6 +314,20 @@ async function handleResign() {
     }
 }
 
+async function handleDraw() {
+    if (gameState.gameOver) return;
+    if (gameState.currentTurn !== gameState.playerColor) {
+        showMessage('请等待 AI 走棋', 'error');
+        return;
+    }
+    const data = await aiDraw();
+    if (data.success) {
+        showMessage(data.message, '');
+    } else {
+        showMessage(data.message || '求和失败', 'error');
+    }
+}
+
 async function handleDifficultyChange(e) {
     const difficulty = e.target.value;
     const data = await setAiDifficulty(difficulty);
@@ -326,6 +344,125 @@ async function handleDifficultyChange(e) {
     }
 }
 
+let replayStep = 0;
+
+async function handleAnalyze() {
+    const panel = document.getElementById('analyzePanel');
+    const loading = document.getElementById('analyzeLoading');
+    const result = document.getElementById('analyzeResult');
+    
+    panel.style.display = 'block';
+    loading.style.display = 'block';
+    result.style.display = 'none';
+    
+    try {
+        const data = await analyzeAiGame();
+        if (data.success) {
+            document.getElementById('analyzeDesc').textContent = data.recommendation.description;
+            const score = data.evaluation;
+            let scoreText = '平衡';
+            if (score > 100) scoreText = `红方优势 (${score})`;
+            else if (score < -100) scoreText = `黑方优势 (${score})`;
+            document.getElementById('analyzeScore').textContent = scoreText;
+            
+            loading.style.display = 'none';
+            result.style.display = 'block';
+        } else {
+            showMessage(data.message || '分析失败', 'error');
+            panel.style.display = 'none';
+        }
+    } catch (e) {
+        showMessage('分析失败', 'error');
+        panel.style.display = 'none';
+    }
+}
+
+async function handleReview() {
+    const panel = document.getElementById('reviewPanel');
+    const loading = document.getElementById('reviewLoading');
+    const result = document.getElementById('reviewResult');
+    
+    panel.style.display = 'block';
+    loading.style.display = 'block';
+    result.style.display = 'none';
+    
+    try {
+        const data = await reviewAiGame();
+        if (data.success) {
+            const reviews = data.reviews;
+            let html = '';
+            for (const review of reviews) {
+                let qualityClass = '';
+                let qualityText = '';
+                switch (review.quality) {
+                    case 'excellent': qualityClass = 'review-excellent'; qualityText = '精彩'; break;
+                    case 'good': qualityClass = 'review-good'; qualityText = '合理'; break;
+                    case 'miss': qualityClass = 'review-miss'; qualityText = '错失'; break;
+                    case 'bad': qualityClass = 'review-bad'; qualityText = '较差'; break;
+                }
+                const colorText = review.color === 'red' ? '红' : '黑';
+                html += `<div class="review-row">
+                    <span class="review-num">${review.move_number}.</span>
+                    <span class="review-color">${colorText}</span>
+                    <span class="review-desc">${review.description}</span>
+                    <span class="review-quality ${qualityClass}">${qualityText}</span>
+                    <span class="review-comment">${review.comment}</span>
+                </div>`;
+            }
+            document.getElementById('reviewList').innerHTML = html || '<div class="review-empty">暂无记录</div>';
+            
+            loading.style.display = 'none';
+            result.style.display = 'block';
+        } else {
+            showMessage(data.message || '复盘失败', 'error');
+            panel.style.display = 'none';
+        }
+    } catch (e) {
+        showMessage('复盘失败', 'error');
+        panel.style.display = 'none';
+    }
+}
+
+function handleReplay() {
+    const panel = document.getElementById('replayPanel');
+    panel.style.display = 'block';
+    replayStep = gameState.moveHistory.length;
+    updateReplayUI();
+}
+
+function replayToStep(step) {
+    const maxStep = gameState.moveHistory.length;
+    replayStep = Math.max(0, Math.min(step, maxStep));
+    updateReplayUI();
+    
+    const g = new ChessGame();
+    for (let i = 0; i < replayStep; i++) {
+        const move = gameState.moveHistory[i];
+        g.make_move(move.from_x, move.from_y, move.to_x, move.to_y);
+    }
+    
+    renderPieces(g.board, gameState.flipped, null, [], replayStep > 0 ? gameState.moveHistory[replayStep - 1] : null);
+    renderClickAreas(gameState.flipped, g.board, [], replayStep > 0 ? gameState.moveHistory[replayStep - 1] : null);
+}
+
+function updateReplayUI() {
+    const maxStep = gameState.moveHistory.length;
+    document.getElementById('replayPosition').textContent = `${replayStep} / ${maxStep}`;
+    
+    let html = '';
+    for (let i = 0; i < maxStep; i++) {
+        const move = gameState.moveHistory[i];
+        const colorText = move.color === 'red' ? '红' : '黑';
+        const isCurrent = i === replayStep - 1;
+        html += `<div class="replay-row ${isCurrent ? 'replay-current' : ''}" data-step="${i + 1}" onclick="replayToStep(${i + 1})">
+            <span class="replay-num">${i + 1}.</span>
+            <span class="replay-color">${colorText}</span>
+            <span class="replay-desc">${move.description}</span>
+        </div>`;
+    }
+    document.getElementById('replayList').innerHTML = html || '<div class="replay-empty">暂无记录</div>';
+}
+
 // ---------- init ----------
 
 function initEventListeners() {
@@ -333,6 +470,7 @@ function initEventListeners() {
     document.getElementById('resetBtn').addEventListener('click', handleReset);
     document.getElementById('flipBtn').addEventListener('click', handleFlip);
     document.getElementById('undoBtn').addEventListener('click', handleUndo);
+    document.getElementById('drawBtn').addEventListener('click', handleDraw);
     document.getElementById('resignBtn').addEventListener('click', handleResign);
     document.getElementById('difficultySelect').addEventListener('change', handleDifficultyChange);
 
@@ -343,6 +481,26 @@ function initEventListeners() {
         list.style.display = visible ? 'none' : 'block';
         arrow.innerHTML = visible ? '&#9660;' : '&#9650;';
     });
+
+    document.getElementById('analyzeBtn').addEventListener('click', handleAnalyze);
+    document.getElementById('closeAnalyzeBtn').addEventListener('click', () => {
+        document.getElementById('analyzePanel').style.display = 'none';
+    });
+
+    document.getElementById('reviewBtn').addEventListener('click', handleReview);
+    document.getElementById('closeReviewBtn').addEventListener('click', () => {
+        document.getElementById('reviewPanel').style.display = 'none';
+    });
+
+    document.getElementById('replayBtn').addEventListener('click', handleReplay);
+    document.getElementById('closeReplayBtn').addEventListener('click', () => {
+        document.getElementById('replayPanel').style.display = 'none';
+    });
+
+    document.getElementById('replayFirstBtn').addEventListener('click', () => replayToStep(0));
+    document.getElementById('replayPrevBtn').addEventListener('click', () => replayToStep(replayStep - 1));
+    document.getElementById('replayNextBtn').addEventListener('click', () => replayToStep(replayStep + 1));
+    document.getElementById('replayLastBtn').addEventListener('click', () => replayToStep(gameState.moveHistory.length));
 }
 
 function initAiBattle() {
