@@ -16,6 +16,7 @@ Heartbeat: client PING {last_seq} -> server PONG {current_seq}.
 Reconnect: client CATCH_UP {from_seq} -> server CATCH_UP_RESPONSE {snapshot}.
 """
 import time
+import logging
 
 from flask import session, request
 from flask_socketio import emit, join_room, leave_room
@@ -28,6 +29,9 @@ from online.message import (
     build_state_update, build_game_start, build_game_over, build_error,
     STATE_CHANGING_TYPES,
 )
+from logging_config import log_online_event, log_game_event
+
+logger = logging.getLogger(__name__)
 
 
 def register_ws_handlers(socketio):
@@ -70,6 +74,7 @@ def register_ws_handlers(socketio):
         uname = session.get('username')
         if uid is None or uname is None:
             # Reject the connection (client must log in first).
+            logger.warning("WS CONNECT REJECTED: no session")
             return False
         sid = request.sid
 
@@ -77,12 +82,16 @@ def register_ws_handlers(socketio):
         old_sid = connection_registry.get_sid_by_user(uid)
         connection_registry.bind(sid, uid, uname)
         if old_sid and old_sid != sid:
+            log_online_event(logger, 'KICK_OLD_CONNECTION', user_id=uid)
             socketio.emit('force_disconnect',
                           {'reason': '账号在其他地方登录'}, to=old_sid)
+
+        log_online_event(logger, 'CONNECT', user_id=uid, sid=sid)
 
         # If the user already has a room (reconnect / page refresh), reattach.
         room = room_manager.get_room_of_user(uid)
         if room is not None:
+            log_online_event(logger, 'RECONNECT', user_id=uid, room_id=room.room_id)
             _attach_to_room(sid, uid, room)
 
     @socketio.on('disconnect')
@@ -93,6 +102,7 @@ def register_ws_handlers(socketio):
             return
         uid = info['user_id']
         room_id = info['room_id']
+        log_online_event(logger, 'DISCONNECT', user_id=uid, room_id=room_id, sid=sid)
         if not room_id:
             return
         room = room_manager.get_room(room_id)
@@ -202,8 +212,13 @@ def register_ws_handlers(socketio):
                     return
                 ok, result, error = room.apply_move(
                     uid, msg_id, expected_seq, fx, fy, tx, ty)
+                if ok and result and not result.get('duplicate'):
+                    log_online_event(logger, 'MOVE', user_id=uid, room_id=room.room_id,
+                                     move=f"({fx},{fy})->({tx},{ty})")
             elif mtype == 'RESIGN':
                 ok, result, error = room.apply_resign(uid, msg_id, expected_seq)
+                if ok and result and not result.get('duplicate'):
+                    log_online_event(logger, 'RESIGN', user_id=uid, room_id=room.room_id)
             elif mtype == 'DRAW_REQUEST':
                 ok, result, error = room.apply_draw_request(uid, msg_id, expected_seq)
             elif mtype == 'DRAW_ACCEPT':

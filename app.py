@@ -22,8 +22,15 @@ from routes import (
     register_room_routes, register_ws_handlers,
 )
 
-# Logging config (hardcoded)
-setup_logging(level='DEBUG', logfile='logs/chinese-chess.log')
+# Logging configuration
+# Set LOG_LEVEL=DEBUG for verbose output, LOG_FORMAT=structured for JSON
+log_level = os.environ.get('LOG_LEVEL', 'INFO')
+log_format = os.environ.get('LOG_FORMAT', 'human')  # 'structured' or 'human'
+setup_logging(
+    level=log_level,
+    logfile='logs/chinese-chess.log',
+    structured=(log_format == 'structured')
+)
 logger = logging.getLogger(__name__)
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))

@@ -10,8 +10,12 @@ Authentication: all endpoints require a valid Flask session (``user_id`` +
 ``username``). Unauthenticated calls receive a 401; the frontend redirects
 to ``/login`` on 401.
 """
+import logging
 from flask import session, jsonify, request
 from game.game_session_manager import game_session_manager
+from logging_config import log_game_event
+
+logger = logging.getLogger(__name__)
 
 
 def _current_user(require=True):
@@ -71,6 +75,8 @@ def register_routes(app):
         g, err = _user_game()
         if err:
             return err
+        user = _current_user()
+        uid, _ = user
         data = request.json or {}
         from_x = data.get('from_x')
         from_y = data.get('from_y')
@@ -79,6 +85,11 @@ def register_routes(app):
         if None in (from_x, from_y, to_x, to_y):
             return jsonify({'success': False, 'message': '缺少参数'})
         result = g.make_move(from_x, from_y, to_x, to_y)
+        if result.get('success'):
+            move_desc = result.get('move_description', '')
+            log_game_event(logger, 'MOVE', user_id=uid, game_mode='local',
+                           move=move_desc, captured=result.get('captured') is not None,
+                           check=result.get('check', False), checkmate=result.get('checkmate', False))
         return jsonify(result)
 
     @app.route('/api/reset', methods=['POST'])
@@ -86,7 +97,10 @@ def register_routes(app):
         g, err = _user_game()
         if err:
             return err
+        user = _current_user()
+        uid, _ = user
         g.reset()
+        log_game_event(logger, 'RESET', user_id=uid, game_mode='local')
         return jsonify({'success': True, **_state_payload(g)})
 
     @app.route('/api/valid_moves', methods=['POST'])
@@ -116,7 +130,12 @@ def register_routes(app):
         g, err = _user_game()
         if err:
             return err
-        return jsonify(g.undo())
+        user = _current_user()
+        uid, _ = user
+        result = g.undo()
+        if result.get('success'):
+            log_game_event(logger, 'UNDO', user_id=uid, game_mode='local')
+        return jsonify(result)
 
     @app.route('/api/flip', methods=['POST'])
     def flip():

@@ -16,10 +16,12 @@ Endpoints (all require login, 401 otherwise):
     POST /api/ai/difficulty        -> change difficulty (resets the game)
 """
 import logging
+import time
 
 from flask import session, jsonify, request
 
 from game.game_session_manager import game_session_manager
+from logging_config import log_game_event, log_ai_event
 
 logger = logging.getLogger(__name__)
 
@@ -60,17 +62,21 @@ def _state_payload(g, ai):
     }
 
 
-def _ai_take_turn(g, ai):
+def _ai_take_turn(g, ai, user_id=None):
     """Let the AI move on ``g``. Returns the make_move result dict, or None."""
     if g.game_over:
         return None
     if g.current_turn != ai.color:
         return None
 
+    start_time = time.time()
     move = ai.choose_move(g.board, g.current_turn)
+    duration_ms = int((time.time() - start_time) * 1000)
+
     if move is None:
         g.game_over = True
         g.winner = PLAYER_COLOR
+        log_ai_event(logger, 'NO_MOVES', depth=ai.depth, duration_ms=duration_ms)
         return {'success': True, 'board': g.board,
                 'current_turn': g.current_turn,
                 'game_over': True, 'winner': PLAYER_COLOR,
@@ -80,6 +86,12 @@ def _ai_take_turn(g, ai):
     fx, fy, tx, ty = move
     result = g.make_move(fx, fy, tx, ty)
     result['ai_move'] = result.get('move_description')
+
+    # Log AI move with thinking details
+    log_ai_event(logger, 'MOVE', depth=ai.max_depth, duration_ms=duration_ms,
+                 move=result.get('move_description'), difficulty=ai.difficulty,
+                 user_id=user_id)
+
     return result
 
 
@@ -129,6 +141,8 @@ def register_ai_routes(app):
         g, ai, err = _user_ai_game()
         if err:
             return err
+        user = _current_user()
+        uid, _ = user
         data = request.json or {}
         from_x = data.get('from_x')
         from_y = data.get('from_y')
@@ -146,8 +160,12 @@ def register_ai_routes(app):
         if not player_result.get('success'):
             return jsonify(player_result)
 
+        # Log player move
         player_move_desc = player_result.get('move_description')
-        ai_result = _ai_take_turn(g, ai)
+        log_game_event(logger, 'PLAYER_MOVE', user_id=uid, game_mode='ai',
+                       move=player_move_desc, captured=player_result.get('captured') is not None)
+
+        ai_result = _ai_take_turn(g, ai, user_id=uid)
         ai_move_desc = None
         if ai_result and ai_result.get('success'):
             ai_move_desc = ai_result.get('ai_move') or ai_result.get('move_description')

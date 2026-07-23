@@ -7,9 +7,13 @@ auth state. Passwords are hashed with werkzeug.
 Supports a ``redirect`` query parameter on ``/login`` so protected pages
 can send the user back after they log in.
 """
+import logging
 from flask import session, jsonify, request
 from urllib.parse import urlparse
 from db import create_user, verify_user, get_user_by_id
+from logging_config import log_auth_event
+
+logger = logging.getLogger(__name__)
 
 
 # Allowed redirect targets after login (must be paths on this same site).
@@ -47,14 +51,19 @@ def register_auth_routes(app):
         redirect = _safe_redirect(data.get('redirect') or request.args.get('redirect'))
 
         if not username or not password:
+            log_auth_event(logger, 'REGISTER', username=username, success=False, reason='empty_fields')
             return jsonify({'success': False, 'message': '用户名和密码不能为空'}), 400
         if not (2 <= len(username) <= 20):
+            log_auth_event(logger, 'REGISTER', username=username, success=False, reason='invalid_username_length')
             return jsonify({'success': False, 'message': '用户名长度需为 2-20 个字符'}), 400
         if len(password) < 4:
+            log_auth_event(logger, 'REGISTER', username=username, success=False, reason='weak_password')
             return jsonify({'success': False, 'message': '密码至少 4 位'}), 400
         try:
             uid = create_user(username, password)
-        except Exception:
+            log_auth_event(logger, 'REGISTER', user_id=uid, username=username, success=True)
+        except Exception as e:
+            log_auth_event(logger, 'REGISTER', username=username, success=False, reason='duplicate_username', error=str(e))
             return jsonify({'success': False, 'message': '用户名已存在'}), 409
         session.clear()
         session['user_id'] = uid
@@ -74,10 +83,12 @@ def register_auth_routes(app):
 
         user = verify_user(username, password)
         if user is None:
+            log_auth_event(logger, 'LOGIN', username=username, success=False, reason='invalid_credentials')
             return jsonify({'success': False, 'message': '用户名或密码错误'}), 401
         session.clear()
         session['user_id'] = user['id']
         session['username'] = user['username']
+        log_auth_event(logger, 'LOGIN', user_id=user['id'], username=user['username'], success=True)
         return jsonify({
             'success': True,
             'user': {'id': user['id'], 'username': user['username']},
@@ -86,7 +97,11 @@ def register_auth_routes(app):
 
     @app.route('/auth/logout', methods=['POST'])
     def auth_logout():
+        uid = session.get('user_id')
+        uname = session.get('username')
         session.clear()
+        if uid:
+            log_auth_event(logger, 'LOGOUT', user_id=uid, username=uname, success=True)
         return jsonify({'success': True, 'redirect': '/login'})
 
     @app.route('/auth/me', methods=['GET'])

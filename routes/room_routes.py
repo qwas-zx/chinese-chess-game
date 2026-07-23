@@ -8,8 +8,12 @@ The *data plane* (moves, heartbeat, state sync) goes over the WebSocket
 Authentication is required for all endpoints — identity is read from the
 Flask session, never from the request body.
 """
+import logging
 from flask import session, jsonify
 from online.room_manager import room_manager
+from logging_config import log_online_event
+
+logger = logging.getLogger(__name__)
 
 
 def _current_user():
@@ -40,6 +44,7 @@ def register_room_routes(app):
             return jsonify({'success': False, 'message': '未登录'}), 401
         uid, uname = user
         room = room_manager.create_room(uid, uname)
+        log_online_event(logger, 'CREATE_ROOM', user_id=uid, room_id=room.room_id)
         return jsonify({
             'success': True,
             'room_id': room.room_id,
@@ -55,7 +60,9 @@ def register_room_routes(app):
         uid, uname = user
         room, err = room_manager.join_room(room_id, uid, uname)
         if room is None:
+            log_online_event(logger, 'JOIN_ROOM_FAILED', user_id=uid, room_id=room_id, reason=err)
             return jsonify({'success': False, 'message': err or '加入失败'}), 400
+        log_online_event(logger, 'JOIN_ROOM', user_id=uid, room_id=room.room_id)
         return jsonify({
             'success': True,
             'room_id': room.room_id,
