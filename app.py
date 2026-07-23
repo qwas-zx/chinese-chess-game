@@ -36,6 +36,10 @@ app = Flask(
 # Session secret. In production set CHESS_SECRET_KEY in the environment.
 app.config['SECRET_KEY'] = os.environ.get('CHESS_SECRET_KEY', 'dev-secret-change-me')
 
+# Auto-reload templates on file change (avoids stale template cache in
+# non-debug mode — this is the "Flask cache" issue that required debug mode).
+app.config['TEMPLATES_AUTO_RELOAD'] = True
+
 # SocketIO with threading async mode — good enough for development and
 # small-scale play without extra async-runtime dependencies.
 socketio = SocketIO(app, async_mode='threading', cors_allowed_origins="*")

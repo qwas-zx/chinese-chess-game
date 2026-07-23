@@ -62,8 +62,8 @@
         <div id="message" class="message"></div>
     </div>
 
-    <!-- Socket.IO client served by flask-socketio -->
-    <script src="/socket.io/socket.io.js"></script>
+    <!-- Socket.IO client (local copy — flask-socketio 5.x no longer serves /socket.io/socket.io.js correctly) -->
+    <script src="/static/js/socket.io.min.js"></script>
     <script type="module" src="/static/js/modules/online.js"></script>
 </body>
 </html>

@@ -91,6 +91,43 @@ async function authMe() {
     return apiCall('/auth/me', 'GET');
 }
 
+// ========== AI battle API ==========
+
+async function fetchAiState() {
+    return apiCall('/api/ai/state');
+}
+
+async function fetchAiValidMoves(x, y) {
+    return apiCall('/api/ai/valid_moves', 'POST', { x, y });
+}
+
+async function makeAiMove(fromX, fromY, toX, toY) {
+    return apiCall('/api/ai/move', 'POST', {
+        from_x: fromX, from_y: fromY, to_x: toX, to_y: toY
+    });
+}
+
+async function resetAiGame(difficulty) {
+    const body = difficulty ? { difficulty } : {};
+    return apiCall('/api/ai/reset', 'POST', body);
+}
+
+async function setAiDifficulty(difficulty) {
+    return apiCall('/api/ai/difficulty', 'POST', { difficulty });
+}
+
+async function undoAiMove() {
+    return apiCall('/api/ai/undo', 'POST');
+}
+
+async function resignAiGame() {
+    return apiCall('/api/ai/resign', 'POST');
+}
+
+async function flipAiBoard() {
+    return apiCall('/api/ai/flip', 'POST');
+}
+
 // ========== Online room API (control plane) ==========
 
 async function createRoom() {
@@ -121,6 +158,10 @@ export {
     drawAction, adjustPiece, importGame,
     // auth
     authRegister, authLogin, authLogout, authMe,
+    // AI battle
+    fetchAiState, fetchAiValidMoves, makeAiMove,
+    resetAiGame, setAiDifficulty, undoAiMove,
+    resignAiGame, flipAiBoard,
     // online rooms
     createRoom, joinRoom, fetchRoom, leaveRoom, fetchMyRoom,
 };
