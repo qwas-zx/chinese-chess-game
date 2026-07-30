@@ -332,15 +332,24 @@ def register_ai_routes(app):
         sim = ChessGame()
         
         for i, move_record in enumerate(history):
-            fx = move_record.get('from_x')
-            fy = move_record.get('from_y')
-            tx = move_record.get('to_x')
-            ty = move_record.get('to_y')
+            from_pos = move_record.get('from') or {}
+            to_pos = move_record.get('to') or {}
+            fx = move_record.get('from_x', from_pos.get('x'))
+            fy = move_record.get('from_y', from_pos.get('y'))
+            tx = move_record.get('to_x', to_pos.get('x'))
+            ty = move_record.get('to_y', to_pos.get('y'))
             desc = move_record.get('description')
             color = move_record.get('color')
-            
+            piece = move_record.get('piece')
+
+            if piece is None and move_record.get('piece_name'):
+                piece = move_record.get('piece_name')
+
             if None in (fx, fy, tx, ty):
                 continue
+
+            if color is None:
+                color = 'red' if piece and str(piece).startswith('red_') else 'black'
             
             sim.current_turn = color
             before_score = review_ai._evaluate(sim.board)
