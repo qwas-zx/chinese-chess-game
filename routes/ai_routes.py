@@ -20,6 +20,7 @@ import time
 
 from flask import session, jsonify, request
 
+from game.core import ChessGame
 from game.game_session_manager import game_session_manager
 from logging_config import log_game_event, log_ai_event
 
