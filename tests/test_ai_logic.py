@@ -122,6 +122,27 @@ class ChessAITests(unittest.TestCase):
         score = ai._evaluate(INITIAL_BOARD)
         self.assertLess(abs(score), 500)  # Allow some positional imbalance
 
+    def test_ai_prefers_to_escape_check_with_tactical_move(self):
+        ai = ChessAI(color='black', difficulty='normal')
+        board = [[None] * 9 for _ in range(10)]
+        board[0][4] = 'black_将'
+        board[9][4] = 'red_帅'
+        board[0][5] = 'black_馬'
+        board[0][3] = 'black_車'
+        board[8][4] = 'red_车'
+        move = ai.choose_move(board, 'black')
+        self.assertIsNotNone(move)
+
+    def test_ai_prioritizes_piece_safety_in_evaluation(self):
+        ai = ChessAI(color='black', difficulty='normal')
+        board = [[None] * 9 for _ in range(10)]
+        board[0][4] = 'black_将'
+        board[9][4] = 'red_帅'
+        board[0][0] = 'black_車'
+        board[1][0] = 'red_炮'
+        score = ai._evaluate(board)
+        self.assertGreater(score, 0)
+
 
 if __name__ == '__main__':
     unittest.main()

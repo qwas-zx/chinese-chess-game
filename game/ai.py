@@ -160,6 +160,12 @@ DIFFICULTY_CONFIG = {
 
 NO_MOVE_SCORE = 100000
 
+MOBILITY_WEIGHT = 8
+KING_SAFETY_WEIGHT = 180
+THREAT_WEIGHT = 45
+DEFENDED_PIECE_WEIGHT = 20
+CENTER_CONTROL_WEIGHT = 6
+
 
 class TranspositionTable:
     """Cache for evaluated positions to avoid redundant computation."""
@@ -281,6 +287,11 @@ class ChessAI:
             logger.debug(f"AI random move: {move}")
             return move
 
+        tactical_move = self._select_tactical_move(board, legal, current_turn)
+        if tactical_move is not None:
+            logger.debug(f"AI tactical move: {tactical_move}")
+            return tactical_move
+
         # Check opening book
         if self.use_book:
             move_count = self._count_moves(board)
@@ -313,6 +324,33 @@ class ChessAI:
                     f"nodes={self.nodes_searched}, cache_hits={self.cache_hits}, time={elapsed_ms}ms")
 
         return best_move
+
+    def _select_tactical_move(self, board, legal, current_turn):
+        """Prefer immediate tactical moves such as captures and checks."""
+        scored = []
+        for move in legal:
+            fx, fy, tx, ty = move
+            piece = board[fy][fx]
+            target = board[ty][tx]
+            if piece is None:
+                continue
+
+            score = 0
+            if target is not None:
+                score += PIECE_VALUES.get(ChessGame.get_piece_type(target), 0) * 20
+                if not self._is_square_attacked(board, tx, ty, self._opponent(ChessGame.get_piece_color(piece))):
+                    score += 800
+
+            if self._results_in_check(board, move, self._opponent(ChessGame.get_piece_color(piece))):
+                score += 1500
+
+            if score > 0:
+                scored.append((score, move))
+
+        if not scored:
+            return None
+        scored.sort(reverse=True, key=lambda item: item[0])
+        return scored[0][1]
 
     def _search_root(self, board, depth: int, current_turn: str, start_time: float):
         """Search at root level with move ordering."""
@@ -356,18 +394,25 @@ class ChessAI:
             return 0
 
         # Terminal depth
-        if depth == 0 or self._is_terminal(board):
+        if self._is_terminal(board):
+            return self._evaluate(board)
+
+        effective_depth = depth
+        if depth > 0 and self._is_tactical_position(board, current_turn):
+            effective_depth = depth + 1
+
+        if effective_depth <= 0:
             return self._evaluate(board)
 
         # Transposition table lookup
-        cached = self.transposition_table.get(board, depth)
+        cached = self.transposition_table.get(board, effective_depth)
         if cached:
             self.cache_hits += 1
             return cached[1]
 
         # Null move pruning (skip opponent's weak move)
-        if self.use_null_move and depth >= 2 and current_turn != self.color:
-            null_score = -self._minimax(board, depth - 2, -beta, -beta + 1,
+        if self.use_null_move and effective_depth >= 2 and current_turn != self.color:
+            null_score = -self._minimax(board, effective_depth - 2, -beta, -beta + 1,
                                         self._opponent(current_turn), start_time)
             if null_score >= beta:
                 return beta  # Prune
@@ -378,7 +423,7 @@ class ChessAI:
             return -NO_MOVE_SCORE if current_turn == self.color else NO_MOVE_SCORE
 
         # Move ordering
-        moves = self._order_moves(board, moves, depth)
+        moves = self._order_moves(board, moves, effective_depth)
 
         best_score = -float('inf')
         best_move = None
@@ -394,11 +439,11 @@ class ChessAI:
 
             alpha = max(alpha, score)
             if alpha >= beta:
-                self._store_killer(move, depth)
+                self._store_killer(move, effective_depth)
                 break  # Beta cutoff
 
         # Store in transposition table
-        self.transposition_table.put(board, depth, best_score, best_move)
+        self.transposition_table.put(board, effective_depth, best_score, best_move)
 
         return best_score
 
@@ -410,11 +455,28 @@ class ChessAI:
 
         for move in moves:
             score = 0
+            fx, fy, tx, ty = move
+            target = board[ty][tx]
+            piece = board[fy][fx]
+            piece_type = ChessGame.get_piece_type(piece)
 
             # Captures are good
-            target = board[move[3]][move[2]]
             if target:
-                score += PIECE_VALUES.get(target.split('_')[1], 0) * 10
+                score += PIECE_VALUES.get(ChessGame.get_piece_type(target), 0) * 10
+
+            # Hanging-piece captures are especially strong
+            if target:
+                opponent_color = self._opponent(ChessGame.get_piece_color(piece))
+                if not self._is_square_attacked(board, tx, ty, opponent_color):
+                    score += 800
+
+            # Checks are excellent tactical moves
+            if self._results_in_check(board, move, self._opponent(ChessGame.get_piece_color(piece))):
+                score += 300
+
+            # Good if it attacks a high-value target
+            if target and PIECE_VALUES.get(piece_type, 0) < PIECE_VALUES.get(ChessGame.get_piece_type(target), 0):
+                score += 80
 
             # Killer moves
             if depth in self.killer_moves and move in self.killer_moves[depth]:
@@ -423,6 +485,9 @@ class ChessAI:
             # History heuristic
             if move in self.history_table:
                 score += self.history_table[move]
+
+            # Centralization / development bias
+            score += self._positional_move_bonus(board, move, piece_type)
 
             scored_moves.append((score, move))
 
@@ -455,29 +520,132 @@ class ChessAI:
                 if piece is None:
                     continue
 
-                color = 'red' if piece.startswith('red_') else 'black'
-                ptype = piece.split('_')[1]
+                color = ChessGame.get_piece_color(piece)
+                ptype = ChessGame.get_piece_type(piece)
 
-                # Material value
                 value = PIECE_VALUES.get(ptype, 0)
 
-                # Positional value from PST
                 if ptype in PST:
                     pst = PST[ptype]
                     if color == 'red':
                         pos_value = pst[y][x]
                     else:
-                        # Flip for black
                         pos_value = pst[9 - y][x]
                     value += pos_value
 
-                # Add to score (positive for AI, negative for opponent)
+                value += self._piece_activity_bonus(board, x, y, color, ptype)
+
+                if self._is_square_defended(board, x, y, color):
+                    value += DEFENDED_PIECE_WEIGHT
+                else:
+                    value -= 25
+
                 if color == self.color:
                     score += value
                 else:
                     score -= value
 
+        score += self._mobility_bonus(board, self.color) - self._mobility_bonus(board, self._opponent(self.color))
+        score += self._king_safety_bonus(board, self.color) - self._king_safety_bonus(board, self._opponent(self.color))
+        score += self._threat_bonus(board, self.color) - self._threat_bonus(board, self._opponent(self.color))
         return score
+
+    def _piece_activity_bonus(self, board, x, y, color, ptype) -> int:
+        """Small positional bonus for activity and centralization."""
+        bonus = 0
+        if ptype in ('车', '马', '炮'):
+            center_distance = abs(x - 4) + abs(y - 4)
+            bonus += max(0, 8 - center_distance) * CENTER_CONTROL_WEIGHT
+        if ptype in ('兵', '卒'):
+            if color == 'red':
+                bonus += max(0, 5 - y) * 2
+            else:
+                bonus += max(0, y - 4) * 2
+        if ptype in ('帅', '将'):
+            bonus += max(0, 8 - abs(x - 4)) * 3
+        return bonus
+
+    def _positional_move_bonus(self, board, move, ptype) -> int:
+        fx, fy, tx, ty = move
+        bonus = 0
+        if ptype in ('车', '马', '炮'):
+            bonus += max(0, 4 - abs(tx - 4)) * 2
+        if ptype in ('兵', '卒'):
+            bonus += 2 if tx == 4 else 0
+        if ptype in ('帅', '将'):
+            bonus += 6 if (3 <= tx <= 5 and 0 <= ty <= 2) or (3 <= tx <= 5 and 7 <= ty <= 9) else 0
+        return bonus
+
+    def _mobility_bonus(self, board, color) -> int:
+        moves = self._legal_moves(board, color, check_king_safety=False)
+        return len(moves) * MOBILITY_WEIGHT
+
+    def _king_safety_bonus(self, board, color) -> int:
+        king_pos = self._find_king_position(board, color)
+        if king_pos is None:
+            return -100000
+        x, y = king_pos
+        safety = 0
+        if self._is_square_attacked(board, x, y, self._opponent(color)):
+            safety -= KING_SAFETY_WEIGHT
+        else:
+            safety += 30
+        return safety
+
+    def _threat_bonus(self, board, color) -> int:
+        moves = self._legal_moves(board, color, check_king_safety=False)
+        threats = 0
+        for move in moves:
+            fx, fy, tx, ty = move
+            target = board[ty][tx]
+            if target is not None:
+                threats += PIECE_VALUES.get(ChessGame.get_piece_type(target), 0) // 100
+        return threats * THREAT_WEIGHT
+
+    def _is_square_defended(self, board, x, y, color) -> bool:
+        return self._is_square_attacked(board, x, y, color)
+
+    def _is_square_attacked(self, board, x, y, color) -> bool:
+        for oy in range(10):
+            for ox in range(9):
+                piece = board[oy][ox]
+                if piece is None:
+                    continue
+                if ChessGame.get_piece_color(piece) != color:
+                    continue
+                if self._sim.is_valid_move(ox, oy, x, y, board=board, color_override=color, check_king_safety=False):
+                    return True
+        return False
+
+    def _results_in_check(self, board, move, color) -> bool:
+        fx, fy, tx, ty = move
+        piece = board[fy][fx]
+        if piece is None:
+            return False
+        new_board = deepcopy(board)
+        new_board[ty][tx] = new_board[fy][fx]
+        new_board[fy][fx] = None
+        self._sim.board = new_board
+        self._sim.current_turn = color
+        return self._sim.is_in_check(color, new_board)
+
+    def _is_tactical_position(self, board, color) -> bool:
+        if self._sim.is_in_check(color, board):
+            return True
+        for move in self._legal_moves(board, color, check_king_safety=False):
+            fx, fy, tx, ty = move
+            target = board[ty][tx]
+            if target is not None:
+                return True
+        return False
+
+    def _find_king_position(self, board, color):
+        king_piece = 'red_帅' if color == 'red' else 'black_将'
+        for y, row in enumerate(board):
+            for x, piece in enumerate(row):
+                if piece == king_piece:
+                    return x, y
+        return None
 
     # ========== Helpers ==========
 
