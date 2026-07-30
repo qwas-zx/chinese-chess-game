@@ -59,7 +59,7 @@ PST = {
         [0,  0,  0, -5,  -10, -5,  0,  0,  0],
         [0,  0,  0, -10, -15, -10, 0,  0,  0],
     ],
-    '车': [  # Rook - control open files, rank 0/9
+    '車': [  # Rook - control open files, rank 0/9 (uses traditional char to match piece type)
         [-10, -8, -6, -4, 0, -4, -6, -8, -10],
         [-8,  -6, -4, -2, 0, -2, -4, -6, -8],
         [-6,  -4, -2,  0,  2,  0, -2, -4, -6],
@@ -161,8 +161,8 @@ DIFFICULTY_CONFIG = {
 NO_MOVE_SCORE = 100000
 
 MOBILITY_WEIGHT = 8
-KING_SAFETY_WEIGHT = 180
-THREAT_WEIGHT = 45
+KING_SAFETY_WEIGHT = 120
+THREAT_WEIGHT = 30
 DEFENDED_PIECE_WEIGHT = 20
 CENTER_CONTROL_WEIGHT = 6
 
@@ -326,31 +326,44 @@ class ChessAI:
         return best_move
 
     def _select_tactical_move(self, board, legal, current_turn):
-        """Prefer immediate tactical moves such as captures and checks."""
-        scored = []
+        """Prefer clearly-winning tactical moves without invoking the full search.
+
+        Conservative: only short-circuit the minimax search when there is an
+        obviously winning capture available -- capturing an undefended piece,
+        or a cheap attacker winning a defended but more valuable piece.
+        Checks and balanced exchanges are deliberately left to the full
+        search so the engine does not play them blindly. The previous
+        version gave a flat +1500 bonus to any check and bypassed the search
+        for every capture, which was the main source of overly aggressive
+        play (e.g. sacrificing material for pointless checking sequences).
+        """
+        best_score = 0
+        best_move = None
         for move in legal:
             fx, fy, tx, ty = move
             piece = board[fy][fx]
             target = board[ty][tx]
-            if piece is None:
-                continue
+            if piece is None or target is None:
+                continue  # non-captures are handled by the full search
 
-            score = 0
-            if target is not None:
-                score += PIECE_VALUES.get(ChessGame.get_piece_type(target), 0) * 20
-                if not self._is_square_attacked(board, tx, ty, self._opponent(ChessGame.get_piece_color(piece))):
-                    score += 800
+            attacker_value = PIECE_VALUES.get(ChessGame.get_piece_type(piece), 0)
+            target_value = PIECE_VALUES.get(ChessGame.get_piece_type(target), 0)
+            opponent_color = self._opponent(ChessGame.get_piece_color(piece))
 
-            if self._results_in_check(board, move, self._opponent(ChessGame.get_piece_color(piece))):
-                score += 1500
+            # Free capture: target square is undefended -> clearly winning.
+            if not self._is_square_attacked(board, tx, ty, opponent_color):
+                score = target_value + 1000
+                if score > best_score:
+                    best_score = score
+                    best_move = move
+            # Favorable exchange: cheap attacker wins a more valuable defended piece.
+            elif target_value > attacker_value + 200:
+                score = (target_value - attacker_value) // 2
+                if score > best_score:
+                    best_score = score
+                    best_move = move
 
-            if score > 0:
-                scored.append((score, move))
-
-        if not scored:
-            return None
-        scored.sort(reverse=True, key=lambda item: item[0])
-        return scored[0][1]
+        return best_move
 
     def _search_root(self, board, depth: int, current_turn: str, start_time: float):
         """Search at root level with move ordering."""
@@ -386,23 +399,36 @@ class ChessAI:
 
     def _minimax(self, board, depth: int, alpha: float, beta: float,
                  current_turn: str, start_time: float) -> int:
-        """Negamax with alpha-beta pruning and enhancements."""
+        """Negamax with alpha-beta pruning and enhancements.
+
+        All returned scores are from the side-to-move's perspective, as
+        required by negamax. ``_evaluate`` always returns from the AI's
+        fixed perspective, so every leaf/terminal return is adjusted with
+        ``_eval_for_turn`` below. The previous version returned the raw
+        AI-perspective score (and 0 on timeout) which corrupted odd-ply
+        search results.
+        """
         self.nodes_searched += 1
 
-        # Time check
+        # Time check: fall back to a static evaluation (correctly oriented)
+        # instead of 0, so a timeout does not masquerade as a drawn position.
         if time.time() - start_time > self.time_limit:
-            return 0
+            return self._eval_for_turn(board, current_turn)
 
-        # Terminal depth
+        # Terminal node (king captured)
         if self._is_terminal(board):
-            return self._evaluate(board)
+            return self._eval_for_turn(board, current_turn)
 
-        effective_depth = depth
-        if depth > 0 and self._is_tactical_position(board, current_turn):
-            effective_depth = depth + 1
+        # Check extension: only extend the search when the side to move is in
+        # check (the standard "check extension"). The previous code extended
+        # for *any* tactical position -- i.e. whenever a capture existed,
+        # which is almost always -- causing search explosion and inconsistent
+        # depth.
+        in_check = self._sim.is_in_check(current_turn, board)
+        effective_depth = depth + 1 if (depth > 0 and in_check) else depth
 
         if effective_depth <= 0:
-            return self._evaluate(board)
+            return self._eval_for_turn(board, current_turn)
 
         # Transposition table lookup
         cached = self.transposition_table.get(board, effective_depth)
@@ -410,8 +436,12 @@ class ChessAI:
             self.cache_hits += 1
             return cached[1]
 
-        # Null move pruning (skip opponent's weak move)
-        if self.use_null_move and effective_depth >= 2 and current_turn != self.color:
+        # Null move pruning: "pass" and let the opponent move; if they still
+        # cannot beat beta, prune. Allowed on any side's turn (negamax is
+        # symmetric) but never while in check (passing is illegal). The
+        # previous ``current_turn != self.color`` guard was inverted and
+        # skipped null-move on the AI's own turns.
+        if self.use_null_move and effective_depth >= 2 and not in_check:
             null_score = -self._minimax(board, effective_depth - 2, -beta, -beta + 1,
                                         self._opponent(current_turn), start_time)
             if null_score >= beta:
@@ -420,7 +450,9 @@ class ChessAI:
         # Generate moves
         moves = self._legal_moves(board, current_turn, check_king_safety=False)
         if not moves:
-            return -NO_MOVE_SCORE if current_turn == self.color else NO_MOVE_SCORE
+            # No legal moves: very bad for the side to move (checkmate /
+            # stalemate). In negamax this is always -NO_MOVE_SCORE.
+            return -NO_MOVE_SCORE
 
         # Move ordering
         moves = self._order_moves(board, moves, effective_depth)
@@ -430,7 +462,7 @@ class ChessAI:
 
         for move in moves:
             new_board = self._apply(board, move)
-            score = -self._minimax(new_board, depth - 1, -beta, -alpha,
+            score = -self._minimax(new_board, effective_depth - 1, -beta, -alpha,
                                    self._opponent(current_turn), start_time)
 
             if score > best_score:
@@ -446,6 +478,16 @@ class ChessAI:
         self.transposition_table.put(board, effective_depth, best_score, best_move)
 
         return best_score
+
+    def _eval_for_turn(self, board, current_turn: str) -> int:
+        """Return ``_evaluate`` oriented to the side-to-move's perspective.
+
+        ``_evaluate`` is always from the AI's fixed perspective; negamax
+        requires scores from the side-to-move's perspective, so we negate
+        when it is the opponent's turn.
+        """
+        score = self._evaluate(board)
+        return score if current_turn == self.color else -score
 
     # ========== Move Ordering ==========
 
@@ -553,7 +595,7 @@ class ChessAI:
     def _piece_activity_bonus(self, board, x, y, color, ptype) -> int:
         """Small positional bonus for activity and centralization."""
         bonus = 0
-        if ptype in ('车', '马', '炮'):
+        if ptype in ('車', '马', '炮'):
             center_distance = abs(x - 4) + abs(y - 4)
             bonus += max(0, 8 - center_distance) * CENTER_CONTROL_WEIGHT
         if ptype in ('兵', '卒'):
@@ -568,7 +610,7 @@ class ChessAI:
     def _positional_move_bonus(self, board, move, ptype) -> int:
         fx, fy, tx, ty = move
         bonus = 0
-        if ptype in ('车', '马', '炮'):
+        if ptype in ('車', '马', '炮'):
             bonus += max(0, 4 - abs(tx - 4)) * 2
         if ptype in ('兵', '卒'):
             bonus += 2 if tx == 4 else 0
@@ -599,7 +641,15 @@ class ChessAI:
             fx, fy, tx, ty = move
             target = board[ty][tx]
             if target is not None:
-                threats += PIECE_VALUES.get(ChessGame.get_piece_type(target), 0) // 100
+                ttype = ChessGame.get_piece_type(target)
+                # Skip the king: a "threat" against the king is just a check,
+                # already accounted for by _king_safety_bonus. Counting it here
+                # as well added ~3000 points (10000//100 * THREAT_WEIGHT) for
+                # every check, which made the engine obsess over pointless
+                # checking sequences -- the main "too aggressive" symptom.
+                if ttype in ('帅', '将'):
+                    continue
+                threats += PIECE_VALUES.get(ttype, 0) // 100
         return threats * THREAT_WEIGHT
 
     def _is_square_defended(self, board, x, y, color) -> bool:
@@ -716,7 +766,7 @@ class ChessAI:
                 if piece:
                     ptype = piece.split('_')[1]
                     # Assume opening moves if pieces are in starting positions
-                    if ptype in ('马', '炮', '车'):
+                    if ptype in ('马', '炮', '車'):
                         if (piece.startswith('red_') and y >= 7) or \
                            (piece.startswith('black_') and y <= 2):
                             count += 1
