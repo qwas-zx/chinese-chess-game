@@ -40,6 +40,34 @@ let selectedPiece = null;
 let validMoves = [];
 let aiThinking = false;
 
+// History review state: 0 = initial board, k = after k moves,
+// moveHistory.length = live/current. When < moveHistory.length the board
+// shows the historical position instead of the live one.
+let reviewStep = 0;
+
+function isReviewing() {
+    return reviewStep < (gameState.moveHistory ? gameState.moveHistory.length : 0);
+}
+
+/** Reconstruct the board after `reviewStep` moves from the move history. */
+function getReviewBoard() {
+    const g = new ChessGame();
+    for (let i = 0; i < reviewStep; i++) {
+        const move = gameState.moveHistory[i];
+        g.make_move(move.from_x, move.from_y, move.to_x, move.to_y);
+    }
+    return g.board;
+}
+
+/** Jump to a step in the move history and re-render. */
+function navigateHistory(step) {
+    const total = gameState.moveHistory ? gameState.moveHistory.length : 0;
+    reviewStep = Math.max(0, Math.min(step, total));
+    selectedPiece = null;
+    validMoves = [];
+    render();
+}
+
 // ---------- UI helpers ----------
 
 function showMessage(text, type = '') {
@@ -116,8 +144,13 @@ function updateHistoryList() {
     const list = document.getElementById('historyList');
     if (!list) return;
     const history = gameState.moveHistory;
+    const total = history ? history.length : 0;
+    const posEl = document.getElementById('histPosition');
+    if (posEl) posEl.textContent = `${reviewStep} / ${total}`;
+
     if (!history || history.length === 0) {
         list.innerHTML = '<div class="history-empty">暂无记录</div>';
+        updateHistoryNavButtons();
         return;
     }
     let html = '';
@@ -125,22 +158,47 @@ function updateHistoryList() {
         const roundNum = Math.floor(i / 2) + 1;
         const redMove = history[i] ? history[i].description : '';
         const blackMove = history[i + 1] ? history[i + 1].description : '';
+        const redCurrent = reviewStep === i + 1;
+        const blackCurrent = reviewStep === i + 2;
         html += `<div class="history-row">
             <span class="history-num">${roundNum}.</span>
-            <span class="history-red">${redMove}</span>
-            <span class="history-black">${blackMove}</span>
+            <span class="history-move history-red ${redCurrent ? 'history-current' : ''}" data-step="${i + 1}">${redMove}</span>
+            <span class="history-move history-black ${blackCurrent ? 'history-current' : ''}" data-step="${i + 2}">${blackMove}</span>
         </div>`;
     }
     list.innerHTML = html;
-    list.scrollTop = list.scrollHeight;
+    list.querySelectorAll('.history-move[data-step]').forEach(el => {
+        el.addEventListener('click', () => {
+            navigateHistory(parseInt(el.dataset.step, 10));
+        });
+    });
+    const currentEl = list.querySelector('.history-current');
+    if (currentEl) currentEl.scrollIntoView({ block: 'nearest' });
+    updateHistoryNavButtons();
+}
+
+function updateHistoryNavButtons() {
+    const total = gameState.moveHistory ? gameState.moveHistory.length : 0;
+    const atStart = reviewStep <= 0;
+    const atEnd = reviewStep >= total;
+    const set = (id, disabled) => {
+        const el = document.getElementById(id);
+        if (el) el.disabled = disabled;
+    };
+    set('histFirstBtn', atStart);
+    set('histPrevBtn', atStart);
+    set('histNextBtn', atEnd);
+    set('histLastBtn', atEnd);
 }
 
 function render() {
-    const lastMove = gameState.moveHistory.length > 0 
-        ? gameState.moveHistory[gameState.moveHistory.length - 1] 
-        : null;
-    renderPieces(gameState.board, gameState.flipped, selectedPiece, validMoves, lastMove);
-    renderClickAreas(gameState.flipped, gameState.board, validMoves, lastMove);
+    const reviewing = isReviewing();
+    const board = reviewing ? getReviewBoard() : gameState.board;
+    const lastMove = reviewing
+        ? (reviewStep > 0 ? gameState.moveHistory[reviewStep - 1] : null)
+        : (gameState.moveHistory.length > 0 ? gameState.moveHistory[gameState.moveHistory.length - 1] : null);
+    renderPieces(board, gameState.flipped, reviewing ? null : selectedPiece, reviewing ? [] : validMoves, lastMove);
+    renderClickAreas(gameState.flipped, board, reviewing ? [] : validMoves, lastMove);
     updateTurnDisplay();
     updateHistoryList();
 
@@ -148,6 +206,9 @@ function render() {
     if (flipBtn) {
         flipBtn.classList.toggle('active', gameState.flipped);
     }
+
+    const boardContainer = document.getElementById('boardContainer');
+    if (boardContainer) boardContainer.classList.toggle('reviewing', reviewing);
 }
 
 // ---------- state loading ----------
@@ -162,6 +223,8 @@ function applyState(data) {
     if (data.difficulty) gameState.difficulty = data.difficulty;
     if (data.player_color) gameState.playerColor = data.player_color;
     if (data.ai_color) gameState.aiColor = data.ai_color;
+    // A real game action updated the state — return to the live position.
+    reviewStep = gameState.moveHistory ? gameState.moveHistory.length : 0;
 }
 
 async function loadGameState() {
@@ -188,6 +251,10 @@ async function handleBoardClick(evt) {
     if (isNaN(x) || isNaN(y)) return;
 
     if (gameState.gameOver) return;
+    if (isReviewing()) {
+        showMessage('正在回顾中，请先回到当前局面（点击 ⏭）', 'warning');
+        return;
+    }
     if (gameState.currentTurn !== gameState.playerColor) {
         showMessage('请等待 AI 走棋', 'error');
         return;
@@ -345,8 +412,6 @@ async function handleDifficultyChange(e) {
     }
 }
 
-let replayStep = 0;
-
 async function handleAnalyze() {
     const panel = document.getElementById('analyzePanel');
     const loading = document.getElementById('analyzeLoading');
@@ -424,46 +489,6 @@ async function handleReview() {
     }
 }
 
-function handleReplay() {
-    const panel = document.getElementById('replayPanel');
-    panel.style.display = 'block';
-    replayStep = gameState.moveHistory.length;
-    updateReplayUI();
-}
-
-function replayToStep(step) {
-    const maxStep = gameState.moveHistory.length;
-    replayStep = Math.max(0, Math.min(step, maxStep));
-    updateReplayUI();
-    
-    const g = new ChessGame();
-    for (let i = 0; i < replayStep; i++) {
-        const move = gameState.moveHistory[i];
-        g.make_move(move.from_x, move.from_y, move.to_x, move.to_y);
-    }
-    
-    renderPieces(g.board, gameState.flipped, null, [], replayStep > 0 ? gameState.moveHistory[replayStep - 1] : null);
-    renderClickAreas(gameState.flipped, g.board, [], replayStep > 0 ? gameState.moveHistory[replayStep - 1] : null);
-}
-
-function updateReplayUI() {
-    const maxStep = gameState.moveHistory.length;
-    document.getElementById('replayPosition').textContent = `${replayStep} / ${maxStep}`;
-    
-    let html = '';
-    for (let i = 0; i < maxStep; i++) {
-        const move = gameState.moveHistory[i];
-        const colorText = move.color === 'red' ? '红' : '黑';
-        const isCurrent = i === replayStep - 1;
-        html += `<div class="replay-row ${isCurrent ? 'replay-current' : ''}" data-step="${i + 1}" onclick="replayToStep(${i + 1})">
-            <span class="replay-num">${i + 1}.</span>
-            <span class="replay-color">${colorText}</span>
-            <span class="replay-desc">${move.description}</span>
-        </div>`;
-    }
-    document.getElementById('replayList').innerHTML = html || '<div class="replay-empty">暂无记录</div>';
-}
-
 // ---------- init ----------
 
 function initEventListeners() {
@@ -483,6 +508,11 @@ function initEventListeners() {
         arrow.innerHTML = visible ? '&#9660;' : '&#9650;';
     });
 
+    document.getElementById('histFirstBtn').addEventListener('click', () => navigateHistory(0));
+    document.getElementById('histPrevBtn').addEventListener('click', () => navigateHistory(reviewStep - 1));
+    document.getElementById('histNextBtn').addEventListener('click', () => navigateHistory(reviewStep + 1));
+    document.getElementById('histLastBtn').addEventListener('click', () => navigateHistory(gameState.moveHistory.length));
+
     document.getElementById('analyzeBtn').addEventListener('click', handleAnalyze);
     document.getElementById('closeAnalyzeBtn').addEventListener('click', () => {
         document.getElementById('analyzePanel').style.display = 'none';
@@ -492,16 +522,6 @@ function initEventListeners() {
     document.getElementById('closeReviewBtn').addEventListener('click', () => {
         document.getElementById('reviewPanel').style.display = 'none';
     });
-
-    document.getElementById('replayBtn').addEventListener('click', handleReplay);
-    document.getElementById('closeReplayBtn').addEventListener('click', () => {
-        document.getElementById('replayPanel').style.display = 'none';
-    });
-
-    document.getElementById('replayFirstBtn').addEventListener('click', () => replayToStep(0));
-    document.getElementById('replayPrevBtn').addEventListener('click', () => replayToStep(replayStep - 1));
-    document.getElementById('replayNextBtn').addEventListener('click', () => replayToStep(replayStep + 1));
-    document.getElementById('replayLastBtn').addEventListener('click', () => replayToStep(gameState.moveHistory.length));
 
     document.getElementById('deduceBtn').addEventListener('click', handleDeduce);
     document.addEventListener('deduce:reset-request', () => {
