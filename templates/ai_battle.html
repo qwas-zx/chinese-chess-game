@@ -66,13 +66,19 @@
             
             <button id="analyzeBtn" class="action-btn" title="AI分析当前局面">提示</button>
             <button id="reviewBtn" class="action-btn" title="复盘分析">复盘</button>
-            <button id="replayBtn" class="action-btn" title="回顾走棋">回顾</button>
             <button id="deduceBtn" class="action-btn" title="在当前局势推演走子（不影响真实棋盘）">推演</button>
         </div>
 
         <div class="history-section">
-            <div class="history-header" id="historyToggle">
-                走棋记录 <span id="historyArrow">&#9660;</span>
+            <div class="history-header">
+                <span class="history-title" id="historyToggle">走棋记录 <span id="historyArrow">&#9660;</span></span>
+                <div class="history-nav">
+                    <button id="histFirstBtn" class="hist-nav-btn" title="回到开局">⏮</button>
+                    <button id="histPrevBtn" class="hist-nav-btn" title="上一步">‹</button>
+                    <span id="histPosition" class="hist-position">0 / 0</span>
+                    <button id="histNextBtn" class="hist-nav-btn" title="下一步">›</button>
+                    <button id="histLastBtn" class="hist-nav-btn" title="回到当前">⏭</button>
+                </div>
             </div>
             <div id="historyList" class="history-list" style="display:none;"></div>
         </div>
@@ -109,23 +115,6 @@
                 <div id="reviewResult" class="review-result" style="display:none;">
                     <div id="reviewList" class="review-list"></div>
                 </div>
-            </div>
-        </div>
-
-        <div id="replayPanel" class="replay-panel" style="display:none;">
-            <div class="replay-header">
-                <span>走棋回顾</span>
-                <button id="closeReplayBtn" class="close-btn">×</button>
-            </div>
-            <div class="replay-content">
-                <div class="replay-controls">
-                    <button id="replayFirstBtn" class="replay-btn">⏮</button>
-                    <button id="replayPrevBtn" class="replay-btn">⏪</button>
-                    <span id="replayPosition" class="replay-position">1 / 1</span>
-                    <button id="replayNextBtn" class="replay-btn">⏩</button>
-                    <button id="replayLastBtn" class="replay-btn">⏭</button>
-                </div>
-                <div id="replayList" class="replay-list"></div>
             </div>
         </div>
     </div>

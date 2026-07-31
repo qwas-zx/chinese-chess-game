@@ -434,6 +434,49 @@ h1 {
     user-select: none;
     display: flex;
     justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+}
+
+.history-title {
+    flex-shrink: 0;
+}
+
+/* Inline navigation controls inside the history header */
+.history-nav {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.hist-nav-btn {
+    background: #333;
+    border: 1px solid #444;
+    color: #fff;
+    padding: 2px 8px;
+    border-radius: 3px;
+    cursor: pointer;
+    font-size: clamp(12px, 2.2vw, 14px);
+    line-height: 1.4;
+    transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.hist-nav-btn:hover:not(:disabled) {
+    background: #444;
+    border-color: #555;
+}
+
+.hist-nav-btn:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+}
+
+.hist-position {
+    font-size: clamp(11px, 2vw, 13px);
+    color: #888;
+    min-width: 48px;
+    text-align: center;
+    user-select: none;
 }
 
 .history-header:hover {
@@ -473,10 +516,34 @@ h1 {
     color: #aaa;
 }
 
+/* Clickable move cells inside the history list */
+.history-move {
+    cursor: pointer;
+    padding: 1px 4px;
+    border-radius: 3px;
+    transition: background 0.15s ease;
+    flex: 1;
+}
+
+.history-move:hover {
+    background: rgba(255, 255, 255, 0.08);
+}
+
+/* Highlight the move corresponding to the currently-viewed board state */
+.history-move.history-current {
+    background: rgba(0, 90, 156, 0.45);
+    color: #fff;
+}
+
 .history-empty {
     padding: 10px;
     color: #666;
     font-size: 13px;
+}
+
+/* Subtle visual cue on the board while reviewing a past position */
+.board-container.reviewing {
+    box-shadow: 0 0 0 2px rgba(0, 90, 156, 0.6), 0 0 12px rgba(0, 90, 156, 0.3);
 }
 
 /* Message */
@@ -980,6 +1047,7 @@ h1 {
 
     .history-header {
         padding: 8px 10px;
+        flex-wrap: wrap;
     }
 
     .history-list {
@@ -993,6 +1061,12 @@ h1 {
 
     .history-red {
         min-width: 60px;
+    }
+
+    .hist-nav-btn {
+        padding: 4px 10px;
+        min-height: 32px;
+        min-width: 36px;
     }
 
     .message {

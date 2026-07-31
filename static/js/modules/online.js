@@ -46,6 +46,33 @@ let heartbeatTimer = null;
 let selectedPiece = null;
 let validMoves = [];          // unused in online mode (server is authority)
 
+// History review state: 0 = initial board, k = after k moves,
+// moveHistory.length = live/current. When < moveHistory.length the board
+// shows the historical position instead of the live one.
+let reviewStep = 0;
+
+function isReviewing() {
+    return reviewStep < (state.moveHistory ? state.moveHistory.length : 0);
+}
+
+/** Reconstruct the board after `reviewStep` moves from the move history. */
+function getReviewBoard() {
+    const g = new ChessGame();
+    for (let i = 0; i < reviewStep; i++) {
+        const move = state.moveHistory[i];
+        g.make_move(move.from_x, move.from_y, move.to_x, move.to_y);
+    }
+    return g.board;
+}
+
+/** Jump to a step in the move history and re-render. */
+function navigateHistory(step) {
+    const total = state.moveHistory ? state.moveHistory.length : 0;
+    reviewStep = Math.max(0, Math.min(step, total));
+    selectedPiece = null;
+    render();
+}
+
 // ---------- helpers ----------
 
 function uuid() {
@@ -203,6 +230,8 @@ function applySnapshot(snapshot) {
     if (typeof snapshot.flipped === 'boolean') state.flipped = snapshot.flipped;
     if (snapshot.status) state.status = snapshot.status;
     if (snapshot.players) state.players = snapshot.players;
+    // Server snapshot is authoritative — return to the live position.
+    reviewStep = state.moveHistory ? state.moveHistory.length : 0;
     render();
 }
 
@@ -258,16 +287,47 @@ function updateHistoryList() {
     const list = document.getElementById('historyList');
     if (!list) return;
     const h = state.moveHistory;
-    if (!h.length) { list.innerHTML = '<div class="history-empty">暂无记录</div>'; return; }
+    const total = h ? h.length : 0;
+    const posEl = document.getElementById('histPosition');
+    if (posEl) posEl.textContent = `${reviewStep} / ${total}`;
+
+    if (!h || !h.length) {
+        list.innerHTML = '<div class="history-empty">暂无记录</div>';
+        updateHistoryNavButtons();
+        return;
+    }
     let html = '';
     for (let i = 0; i < h.length; i += 2) {
         const n = Math.floor(i / 2) + 1;
         const r = h[i] ? h[i].description : '';
         const b = h[i + 1] ? h[i + 1].description : '';
-        html += `<div class="history-row"><span class="history-num">${n}.</span><span class="history-red">${r}</span><span class="history-black">${b}</span></div>`;
+        const redCurrent = reviewStep === i + 1;
+        const blackCurrent = reviewStep === i + 2;
+        html += `<div class="history-row"><span class="history-num">${n}.</span><span class="history-move history-red ${redCurrent ? 'history-current' : ''}" data-step="${i + 1}">${r}</span><span class="history-move history-black ${blackCurrent ? 'history-current' : ''}" data-step="${i + 2}">${b}</span></div>`;
     }
     list.innerHTML = html;
-    list.scrollTop = list.scrollHeight;
+    list.querySelectorAll('.history-move[data-step]').forEach(el => {
+        el.addEventListener('click', () => {
+            navigateHistory(parseInt(el.dataset.step, 10));
+        });
+    });
+    const currentEl = list.querySelector('.history-current');
+    if (currentEl) currentEl.scrollIntoView({ block: 'nearest' });
+    updateHistoryNavButtons();
+}
+
+function updateHistoryNavButtons() {
+    const total = state.moveHistory ? state.moveHistory.length : 0;
+    const atStart = reviewStep <= 0;
+    const atEnd = reviewStep >= total;
+    const set = (id, disabled) => {
+        const el = document.getElementById(id);
+        if (el) el.disabled = disabled;
+    };
+    set('histFirstBtn', atStart);
+    set('histPrevBtn', atStart);
+    set('histNextBtn', atEnd);
+    set('histLastBtn', atEnd);
 }
 
 function updateRoomInfo() {
@@ -288,16 +348,21 @@ function updatePendingIndicator() {
 }
 
 function render() {
-    const lastMove = state.moveHistory.length > 0 
-        ? state.moveHistory[state.moveHistory.length - 1] 
-        : null;
-    renderPieces(state.board, state.flipped, selectedPiece, validMoves, lastMove);
-    renderClickAreas(state.flipped, state.board, validMoves, lastMove);
+    const reviewing = isReviewing();
+    const board = reviewing ? getReviewBoard() : state.board;
+    const lastMove = reviewing
+        ? (reviewStep > 0 ? state.moveHistory[reviewStep - 1] : null)
+        : (state.moveHistory.length > 0 ? state.moveHistory[state.moveHistory.length - 1] : null);
+    renderPieces(board, state.flipped, reviewing ? null : selectedPiece, reviewing ? [] : validMoves, lastMove);
+    renderClickAreas(state.flipped, board, reviewing ? [] : validMoves, lastMove);
     updateTurnDisplay();
     updateDrawBanner();
     updateHistoryList();
     updateRoomInfo();
     updatePendingIndicator();
+
+    const boardContainer = document.getElementById('boardContainer');
+    if (boardContainer) boardContainer.classList.toggle('reviewing', reviewing);
 }
 
 // ---------- click handling (optimistic render + send) ----------
@@ -309,6 +374,10 @@ function handleBoardClick(evt) {
     const y = parseInt(target.dataset.y);
     if (isNaN(x) || isNaN(y)) return;
     if (state.gameOver) return;
+    if (isReviewing()) {
+        showMessage('正在回顾中，请先回到当前局面（点击 ⏭）', 'warning');
+        return;
+    }
     if (state.status !== 'playing') { showMessage('对局尚未开始'); return; }
     if (!state.myColor) { showMessage('正在同步状态...'); return; }
     if (state.currentTurn !== state.myColor) {
@@ -467,8 +536,6 @@ function handleFlipToggle() {
     render();
 }
 
-let replayStep = 0;
-
 function handleChat() {
     const panel = document.getElementById('chatPanel');
     panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
@@ -481,13 +548,6 @@ function handleSendChat() {
         sendChat(text);
         input.value = '';
     }
-}
-
-function handleReplay() {
-    const panel = document.getElementById('replayPanel');
-    panel.style.display = 'block';
-    replayStep = state.moveHistory.length;
-    updateReplayUI();
 }
 
 /**
@@ -506,39 +566,6 @@ function handleDeduce() {
         openDeduce(state.board, state.currentTurn, state.flipped);
         showMessage('推演模式已开启（仅你可见）', '');
     }
-}
-
-function replayToStep(step) {
-    const maxStep = state.moveHistory.length;
-    replayStep = Math.max(0, Math.min(step, maxStep));
-    updateReplayUI();
-    
-    const g = new ChessGame();
-    for (let i = 0; i < replayStep; i++) {
-        const move = state.moveHistory[i];
-        g.make_move(move.from_x, move.from_y, move.to_x, move.to_y);
-    }
-    
-    renderPieces(g.board, state.flipped, null, [], replayStep > 0 ? state.moveHistory[replayStep - 1] : null);
-    renderClickAreas(state.flipped, g.board, [], replayStep > 0 ? state.moveHistory[replayStep - 1] : null);
-}
-
-function updateReplayUI() {
-    const maxStep = state.moveHistory.length;
-    document.getElementById('replayPosition').textContent = `${replayStep} / ${maxStep}`;
-    
-    let html = '';
-    for (let i = 0; i < maxStep; i++) {
-        const move = state.moveHistory[i];
-        const colorText = move.color === 'red' ? '红' : '黑';
-        const isCurrent = i === replayStep - 1;
-        html += `<div class="replay-row ${isCurrent ? 'replay-current' : ''}" data-step="${i + 1}" onclick="replayToStep(${i + 1})">
-            <span class="replay-num">${i + 1}.</span>
-            <span class="replay-color">${colorText}</span>
-            <span class="replay-desc">${move.description}</span>
-        </div>`;
-    }
-    document.getElementById('replayList').innerHTML = html || '<div class="replay-empty">暂无记录</div>';
 }
 
 // ---------- init ----------
@@ -569,6 +596,11 @@ async function initOnlineGame() {
         arrow.innerHTML = visible ? '&#9660;' : '&#9650;';
     });
 
+    document.getElementById('histFirstBtn').addEventListener('click', () => navigateHistory(0));
+    document.getElementById('histPrevBtn').addEventListener('click', () => navigateHistory(reviewStep - 1));
+    document.getElementById('histNextBtn').addEventListener('click', () => navigateHistory(reviewStep + 1));
+    document.getElementById('histLastBtn').addEventListener('click', () => navigateHistory(state.moveHistory.length));
+
     document.getElementById('chatBtn').addEventListener('click', handleChat);
     document.getElementById('closeChatBtn').addEventListener('click', () => {
         document.getElementById('chatPanel').style.display = 'none';
@@ -577,15 +609,6 @@ async function initOnlineGame() {
     document.getElementById('chatInput').addEventListener('keypress', (e) => {
         if (e.key === 'Enter') handleSendChat();
     });
-
-    document.getElementById('replayBtn').addEventListener('click', handleReplay);
-    document.getElementById('closeReplayBtn').addEventListener('click', () => {
-        document.getElementById('replayPanel').style.display = 'none';
-    });
-    document.getElementById('replayFirstBtn').addEventListener('click', () => replayToStep(0));
-    document.getElementById('replayPrevBtn').addEventListener('click', () => replayToStep(replayStep - 1));
-    document.getElementById('replayNextBtn').addEventListener('click', () => replayToStep(replayStep + 1));
-    document.getElementById('replayLastBtn').addEventListener('click', () => replayToStep(state.moveHistory.length));
 
     // 推演：完全本地，不发送任何 socket 消息，仅自己可见
     document.getElementById('deduceBtn').addEventListener('click', handleDeduce);

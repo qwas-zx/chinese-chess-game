@@ -37,6 +37,34 @@ let selectedPiece = null;
 let validMoves = [];
 let adjustSelectedPieceType = null;
 
+// History review state: 0 = initial board, k = after k moves,
+// moveHistory.length = live/current. When < moveHistory.length the board
+// shows the historical position instead of the live one.
+let reviewStep = 0;
+
+function isReviewing() {
+    return reviewStep < (gameState.moveHistory ? gameState.moveHistory.length : 0);
+}
+
+/** Reconstruct the board after `reviewStep` moves from the move history. */
+function getReviewBoard() {
+    const g = new ChessGame();
+    for (let i = 0; i < reviewStep; i++) {
+        const move = gameState.moveHistory[i];
+        g.make_move(move.from_x, move.from_y, move.to_x, move.to_y);
+    }
+    return g.board;
+}
+
+/** Jump to a step in the move history and re-render. */
+function navigateHistory(step) {
+    const total = gameState.moveHistory ? gameState.moveHistory.length : 0;
+    reviewStep = Math.max(0, Math.min(step, total));
+    selectedPiece = null;
+    validMoves = [];
+    render();
+}
+
 /**
  * Show message to user
  */
@@ -99,13 +127,23 @@ function updateDrawBanner() {
 
 /**
  * Update move history list
+ *
+ * Each move cell is clickable: clicking jumps the board to the state
+ * after that move. The currently-viewed step is highlighted.
+ * reviewStep semantics: 0 = initial board, k = after k moves,
+ * moveHistory.length = live/current.
  */
 function updateHistoryList() {
     const historyList = document.getElementById('historyList');
     const history = gameState.moveHistory;
+    const posEl = document.getElementById('histPosition');
+    const total = history ? history.length : 0;
+
+    if (posEl) posEl.textContent = `${reviewStep} / ${total}`;
 
     if (!history || history.length === 0) {
         historyList.innerHTML = '<div class="history-empty">暂无记录</div>';
+        updateHistoryNavButtons();
         return;
     }
 
@@ -114,25 +152,54 @@ function updateHistoryList() {
         const roundNum = Math.floor(i / 2) + 1;
         const redMove = history[i] ? history[i].description : '';
         const blackMove = history[i + 1] ? history[i + 1].description : '';
+        const redCurrent = reviewStep === i + 1;
+        const blackCurrent = reviewStep === i + 2;
         html += `<div class="history-row">
             <span class="history-num">${roundNum}.</span>
-            <span class="history-red">${redMove}</span>
-            <span class="history-black">${blackMove}</span>
+            <span class="history-move history-red ${redCurrent ? 'history-current' : ''}" data-step="${i + 1}">${redMove}</span>
+            <span class="history-move history-black ${blackCurrent ? 'history-current' : ''}" data-step="${i + 2}">${blackMove}</span>
         </div>`;
     }
     historyList.innerHTML = html;
-    historyList.scrollTop = historyList.scrollHeight;
+
+    historyList.querySelectorAll('.history-move[data-step]').forEach(el => {
+        el.addEventListener('click', () => {
+            navigateHistory(parseInt(el.dataset.step, 10));
+        });
+    });
+
+    const currentEl = historyList.querySelector('.history-current');
+    if (currentEl) currentEl.scrollIntoView({ block: 'nearest' });
+
+    updateHistoryNavButtons();
+}
+
+/** Enable/disable the prev/next nav buttons based on current review step. */
+function updateHistoryNavButtons() {
+    const total = gameState.moveHistory ? gameState.moveHistory.length : 0;
+    const atStart = reviewStep <= 0;
+    const atEnd = reviewStep >= total;
+    const set = (id, disabled) => {
+        const el = document.getElementById(id);
+        if (el) el.disabled = disabled;
+    };
+    set('histFirstBtn', atStart);
+    set('histPrevBtn', atStart);
+    set('histNextBtn', atEnd);
+    set('histLastBtn', atEnd);
 }
 
 /**
  * Main render function
  */
 function render() {
-    const lastMove = gameState.moveHistory.length > 0 
-        ? gameState.moveHistory[gameState.moveHistory.length - 1] 
-        : null;
-    renderPieces(gameState.board, gameState.flipped, selectedPiece, validMoves, lastMove);
-    renderClickAreas(gameState.flipped, gameState.board, validMoves, lastMove);
+    const reviewing = isReviewing();
+    const board = reviewing ? getReviewBoard() : gameState.board;
+    const lastMove = reviewing
+        ? (reviewStep > 0 ? gameState.moveHistory[reviewStep - 1] : null)
+        : (gameState.moveHistory.length > 0 ? gameState.moveHistory[gameState.moveHistory.length - 1] : null);
+    renderPieces(board, gameState.flipped, reviewing ? null : selectedPiece, reviewing ? [] : validMoves, lastMove);
+    renderClickAreas(gameState.flipped, board, reviewing ? [] : validMoves, lastMove);
     updateTurnDisplay();
     updateDrawBanner();
     updateHistoryList();
@@ -156,6 +223,10 @@ function render() {
     } else {
         flipBtn.classList.remove('active');
     }
+
+    // Visual cue when reviewing a past position
+    const boardContainer = document.getElementById('boardContainer');
+    if (boardContainer) boardContainer.classList.toggle('reviewing', reviewing);
 }
 
 /**
@@ -172,6 +243,7 @@ async function loadGameState() {
         gameState.moveHistory = data.move_history || [];
         gameState.drawRequestedBy = data.draw_requested_by;
         gameState.adjustMode = data.adjust_mode;
+        reviewStep = gameState.moveHistory.length;
         render();
     } catch (e) {
         showMessage('获取游戏状态失败', 'error');
@@ -190,6 +262,11 @@ async function handleBoardClick(evt) {
 
     if (gameState.adjustMode) {
         handleAdjustClick(x, y);
+        return;
+    }
+
+    if (isReviewing()) {
+        showMessage('正在回顾中，请先回到当前局面（点击 ⏭）', 'warning');
         return;
     }
 
@@ -246,6 +323,7 @@ async function handleMove(fromX, fromY, toX, toY) {
 
         selectedPiece = null;
         validMoves = [];
+        reviewStep = gameState.moveHistory.length;
 
         if (data.game_over) {
             if (data.winner === 'draw') {
@@ -303,6 +381,7 @@ async function handleReset() {
         gameState.adjustMode = false;
         selectedPiece = null;
         validMoves = [];
+        reviewStep = gameState.moveHistory.length;
         showMessage('游戏已重置');
         render();
     }
@@ -319,6 +398,7 @@ async function handleUndo() {
         gameState.drawRequestedBy = null;
         selectedPiece = null;
         validMoves = [];
+        reviewStep = gameState.moveHistory.length;
         showMessage('已悔棋');
         render();
     } else {
@@ -468,6 +548,7 @@ async function handleImport(file) {
             gameState.adjustMode = false;
             selectedPiece = null;
             validMoves = [];
+            reviewStep = gameState.moveHistory.length;
             showMessage('棋谱已导入', 'success');
             render();
         } else {
@@ -518,6 +599,11 @@ function initEventListeners() {
         historyArrow.innerHTML = isVisible ? '&#9660;' : '&#9650;';
     });
 
+    document.getElementById('histFirstBtn').addEventListener('click', () => navigateHistory(0));
+    document.getElementById('histPrevBtn').addEventListener('click', () => navigateHistory(reviewStep - 1));
+    document.getElementById('histNextBtn').addEventListener('click', () => navigateHistory(reviewStep + 1));
+    document.getElementById('histLastBtn').addEventListener('click', () => navigateHistory(gameState.moveHistory.length));
+
     document.getElementById('analyzeBtn').addEventListener('click', handleAnalyze);
     document.getElementById('closeAnalyzeBtn').addEventListener('click', () => {
         document.getElementById('analyzePanel').style.display = 'none';
@@ -527,16 +613,6 @@ function initEventListeners() {
     document.getElementById('closeReviewBtn').addEventListener('click', () => {
         document.getElementById('reviewPanel').style.display = 'none';
     });
-
-    document.getElementById('replayBtn').addEventListener('click', handleReplay);
-    document.getElementById('closeReplayBtn').addEventListener('click', () => {
-        document.getElementById('replayPanel').style.display = 'none';
-    });
-
-    document.getElementById('replayFirstBtn').addEventListener('click', () => replayToStep(0));
-    document.getElementById('replayPrevBtn').addEventListener('click', () => replayToStep(replayStep - 1));
-    document.getElementById('replayNextBtn').addEventListener('click', () => replayToStep(replayStep + 1));
-    document.getElementById('replayLastBtn').addEventListener('click', () => replayToStep(gameState.moveHistory.length));
 
     document.getElementById('deduceBtn').addEventListener('click', handleDeduce);
     // 推演"回到当前"时，用真实棋盘状态重置推演
@@ -562,8 +638,6 @@ function handleDeduce() {
         showMessage('推演模式已开启', '');
     }
 }
-
-let replayStep = 0;
 
 async function handleAnalyze() {
     const panel = document.getElementById('analyzePanel');
@@ -640,46 +714,6 @@ async function handleReview() {
         showMessage('复盘失败', 'error');
         panel.style.display = 'none';
     }
-}
-
-function handleReplay() {
-    const panel = document.getElementById('replayPanel');
-    panel.style.display = 'block';
-    replayStep = gameState.moveHistory.length;
-    updateReplayUI();
-}
-
-function replayToStep(step) {
-    const maxStep = gameState.moveHistory.length;
-    replayStep = Math.max(0, Math.min(step, maxStep));
-    updateReplayUI();
-    
-    const g = new ChessGame();
-    for (let i = 0; i < replayStep; i++) {
-        const move = gameState.moveHistory[i];
-        g.make_move(move.from_x, move.from_y, move.to_x, move.to_y);
-    }
-    
-    renderPieces(g.board, gameState.flipped, null, [], replayStep > 0 ? gameState.moveHistory[replayStep - 1] : null);
-    renderClickAreas(gameState.flipped, g.board, [], replayStep > 0 ? gameState.moveHistory[replayStep - 1] : null);
-}
-
-function updateReplayUI() {
-    const maxStep = gameState.moveHistory.length;
-    document.getElementById('replayPosition').textContent = `${replayStep} / ${maxStep}`;
-    
-    let html = '';
-    for (let i = 0; i < maxStep; i++) {
-        const move = gameState.moveHistory[i];
-        const colorText = move.color === 'red' ? '红' : '黑';
-        const isCurrent = i === replayStep - 1;
-        html += `<div class="replay-row ${isCurrent ? 'replay-current' : ''}" data-step="${i + 1}" onclick="replayToStep(${i + 1})">
-            <span class="replay-num">${i + 1}.</span>
-            <span class="replay-color">${colorText}</span>
-            <span class="replay-desc">${move.description}</span>
-        </div>`;
-    }
-    document.getElementById('replayList').innerHTML = html || '<div class="replay-empty">暂无记录</div>';
 }
 
 /**
