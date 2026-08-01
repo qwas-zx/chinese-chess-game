@@ -43,10 +43,10 @@
 
 | 层级 | 技术 |
 |------|------|
-| 后端 | Python 3.10+, Flask 3.0+, Flask-SocketIO 5.6+ |
+| 后端 | Python 3.10+, Flask 3.0+, Flask-SocketIO 5.3+, python-socketio[client] 5.8+ |
 | 前端 | HTML5, CSS3, JavaScript (Vanilla ES Modules) |
 | 数据库 | SQLite（内置，无需额外安装） |
-| 实时通信 | WebSocket (Socket.IO 4.7.x) |
+| 实时通信 | WebSocket (Socket.IO 4.7.x 本地客户端副本) |
 | AI 引擎 | 纯 Python（Minimax + Alpha-Beta，无额外依赖） |
 | 身份认证 | Flask Session（Cookie-based, httponly） |
 | 密码哈希 | werkzeug.security (PBKDF2) |
