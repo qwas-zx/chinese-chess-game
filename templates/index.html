@@ -52,8 +52,7 @@
             <button id="adjustBtn" class="action-btn" title="调整棋子">调整</button>
             <button id="exportBtn" class="action-btn" title="导出棋谱">导出</button>
             <button id="importBtn" class="action-btn" title="导入棋谱">导入</button>
-            <input type="file" id="importFile" accept=".txt" style="display:none;">
-            
+
             <div class="toolbar-divider"></div>
             
             <button id="analyzeBtn" class="action-btn" title="AI分析当前局面">提示</button>
@@ -139,6 +138,31 @@
                 <div id="reviewLoading" class="review-loading">分析中…</div>
                 <div id="reviewResult" class="review-result" style="display:none;">
                     <div id="reviewList" class="review-list"></div>
+                </div>
+            </div>
+        </div>
+
+        <div id="ioPanel" class="io-panel" style="display:none;">
+            <div class="io-header">
+                <span id="ioTitle">导出 / 导入</span>
+                <button id="closeIoBtn" class="close-btn">×</button>
+            </div>
+            <div class="io-content">
+                <div class="io-mode-tabs">
+                    <button class="io-tab active" data-io-mode="export">导出</button>
+                    <button class="io-tab" data-io-mode="import">导入</button>
+                </div>
+                <div class="io-format-row">
+                    <span class="io-format-label">格式：</span>
+                    <div id="ioFormatChips" class="io-format-chips"></div>
+                </div>
+                <textarea id="ioText" class="io-textarea" placeholder="此处显示或粘贴内容…" rows="6"></textarea>
+                <div id="ioHint" class="io-hint"></div>
+                <div class="io-actions">
+                    <button id="ioPrimaryBtn" class="action-btn">下载</button>
+                    <button id="ioCopyBtn" class="action-btn">复制</button>
+                    <label for="ioFileInput" id="ioFileLabel" class="action-btn" style="display:none;cursor:pointer;">选择文件</label>
+                    <input type="file" id="ioFileInput" style="display:none;">
                 </div>
             </div>
         </div>

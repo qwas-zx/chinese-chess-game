@@ -1477,11 +1477,6 @@ h1 {
     pointer-events: none;
 }
 
-/* ===== Import file input ===== */
-#importFile {
-    display: none;
-}
-
 /* ===== Toolbar divider ===== */
 .toolbar-divider {
     width: 1px;
@@ -1618,6 +1613,158 @@ h1 {
 .review-comment {
     color: #888;
     font-size: clamp(11px, 2vw, 12px);
+}
+
+/* ===== IO panel (import / export) ===== */
+.io-panel {
+    margin-top: clamp(8px, 2vw, 12px);
+    background: #2a2a2a;
+    border: 1px solid #3a3a3a;
+    border-radius: 6px;
+    overflow: hidden;
+    text-align: left;
+}
+
+.io-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 12px;
+    background: #333;
+    font-size: clamp(13px, 2.5vw, 15px);
+    font-weight: 600;
+}
+
+.io-content {
+    padding: clamp(8px, 2vw, 12px);
+}
+
+.io-mode-tabs {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 10px;
+}
+
+.io-tab {
+    flex: 1;
+    padding: 6px 12px;
+    background: #333;
+    color: #aaa;
+    border: 1px solid #444;
+    border-radius: 3px;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: clamp(12px, 2.2vw, 14px);
+    transition: all 0.15s ease;
+}
+
+.io-tab:hover {
+    background: #444;
+    color: #fff;
+}
+
+.io-tab.active {
+    background: #005a9c;
+    color: #fff;
+    border-color: #005a9c;
+}
+
+.io-format-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+    flex-wrap: wrap;
+}
+
+.io-format-label {
+    color: #888;
+    font-size: clamp(12px, 2.2vw, 13px);
+    flex-shrink: 0;
+}
+
+.io-format-chips {
+    display: flex;
+    gap: 4px;
+    flex-wrap: wrap;
+}
+
+.io-chip {
+    padding: 4px 10px;
+    background: #2a2a2a;
+    color: #ccc;
+    border: 1px solid #555;
+    border-radius: 12px;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: clamp(11px, 2vw, 12px);
+    transition: all 0.15s ease;
+    user-select: none;
+}
+
+.io-chip:hover {
+    background: #3a3a3a;
+    color: #fff;
+    border-color: #777;
+}
+
+.io-chip.active {
+    background: #f9dc4a;
+    color: #1a1a1a;
+    border-color: #f9dc4a;
+    font-weight: 600;
+}
+
+.io-textarea {
+    width: 100%;
+    min-height: 110px;
+    max-height: 240px;
+    padding: 8px 10px;
+    background: #1f1f1f;
+    color: #ddd;
+    border: 1px solid #444;
+    border-radius: 4px;
+    font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+    font-size: clamp(11px, 2vw, 13px);
+    line-height: 1.5;
+    resize: vertical;
+    word-break: break-all;
+}
+
+.io-textarea:focus {
+    outline: none;
+    border-color: #005a9c;
+    box-shadow: 0 0 0 2px rgba(0, 90, 156, 0.25);
+}
+
+.io-textarea[readonly] {
+    background: #181818;
+    color: #aaa;
+    cursor: default;
+}
+
+.io-hint {
+    margin-top: 6px;
+    color: #888;
+    font-size: clamp(11px, 2vw, 12px);
+    min-height: 1em;
+    line-height: 1.4;
+}
+
+.io-hint.io-error {
+    color: #f87171;
+}
+
+.io-hint.io-success {
+    color: #4ade80;
+}
+
+.io-actions {
+    display: flex;
+    gap: 6px;
+    margin-top: 10px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
 }
 
 /* ===== Replay panel ===== */

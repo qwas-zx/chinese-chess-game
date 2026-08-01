@@ -199,9 +199,11 @@ def register_routes(app):
         if err:
             return err
         data = request.json or {}
-        board = data.get('board')
-        current_turn = data.get('current_turn', 'red')
-        move_history = data.get('move_history', [])
+        try:
+            from game.io_formats import parse_import_payload
+            board, current_turn, move_history = parse_import_payload(data)
+        except ValueError as e:
+            return jsonify({'success': False, 'message': str(e) or '导入数据无效'})
         if g.import_state(board, current_turn, move_history):
             return jsonify({'success': True, **_state_payload(g)})
         return jsonify({'success': False, 'message': '导入数据无效'})
