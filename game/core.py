@@ -3,6 +3,7 @@ Chinese Chess Game - Core Game Logic
 """
 import logging
 from copy import deepcopy
+from typing import Optional
 from .constants import INITIAL_BOARD, PIECE_NAMES, COL_NAMES, BOARD_WIDTH, BOARD_HEIGHT
 
 logger = logging.getLogger(__name__)
@@ -35,14 +36,14 @@ class ChessGame:
     # ========== Piece Helpers ==========
 
     @staticmethod
-    def get_piece_color(piece):
+    def get_piece_color(piece: Optional[str]) -> Optional[str]:
         """Get color of a piece ('red' or 'black')"""
         if piece is None:
             return None
         return 'red' if piece.startswith('red_') else 'black'
 
     @staticmethod
-    def get_piece_type(piece):
+    def get_piece_type(piece: Optional[str]) -> Optional[str]:
         """Get type of a piece (king, rook, cannon, etc.)"""
         if piece is None:
             return None

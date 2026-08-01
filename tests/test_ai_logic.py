@@ -143,6 +143,16 @@ class ChessAITests(unittest.TestCase):
         score = ai._evaluate(board)
         self.assertGreater(score, 0)
 
+    def test_ai_repeated_checks_do_not_overflow_recursion(self):
+        ai = ChessAI(color='black', difficulty='normal')
+        board = [[None] * 9 for _ in range(10)]
+        board[0][4] = 'black_将'
+        board[9][4] = 'red_帅'
+        board[5][4] = 'black_車'
+        board[6][4] = 'red_炮'
+        move = ai.choose_move(board, 'black')
+        self.assertIsNotNone(move)
+
 
 if __name__ == '__main__':
     unittest.main()

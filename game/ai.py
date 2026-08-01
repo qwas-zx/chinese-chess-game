@@ -355,9 +355,18 @@ class ChessAI:
             if piece is None or target is None:
                 continue  # non-captures are handled by the full search
 
-            attacker_value = PIECE_VALUES.get(ChessGame.get_piece_type(piece), 0)
-            target_value = PIECE_VALUES.get(ChessGame.get_piece_type(target), 0)
-            opponent_color = self._opponent(ChessGame.get_piece_color(piece))
+            piece_color = ChessGame.get_piece_color(piece)
+            if piece_color is None:
+                continue
+
+            piece_type = ChessGame.get_piece_type(piece)
+            target_type = ChessGame.get_piece_type(target)
+            if piece_type is None or target_type is None:
+                continue
+
+            attacker_value = PIECE_VALUES.get(piece_type, 0)
+            target_value = PIECE_VALUES.get(target_type, 0)
+            opponent_color = self._opponent(piece_color)
 
             # Free capture: target square is undefended -> clearly winning.
             if not self._is_square_attacked(board, tx, ty, opponent_color):
@@ -384,8 +393,8 @@ class ChessAI:
         legal = self._order_moves(board, legal, depth)
 
         best_move = legal[0]
-        best_score = -float('inf')
-        alpha, beta = -float('inf'), float('inf')
+        best_score = -10**18
+        alpha, beta = -10**18, 10**18
 
         for move in legal:
             if time.time() - start_time > self.time_limit:
@@ -410,68 +419,60 @@ class ChessAI:
                  current_turn: str, start_time: float) -> int:
         """Negamax with alpha-beta pruning and enhancements.
 
-        All returned scores are from the side-to-move's perspective, as
-        required by negamax. ``_evaluate`` always returns from the AI's
-        fixed perspective, so every leaf/terminal return is adjusted with
-        ``_eval_for_turn`` below. The previous version returned the raw
-        AI-perspective score (and 0 on timeout) which corrupted odd-ply
-        search results.
+        The search depth is strictly bounded to avoid runaway recursion in
+        tactical positions (e.g. repeated checks) and to keep the engine
+        responsive under load.
         """
         self.nodes_searched += 1
 
-        # Time check: fall back to a static evaluation (correctly oriented)
-        # instead of 0, so a timeout does not masquerade as a drawn position.
         if time.time() - start_time > self.time_limit:
             return self._eval_for_turn(board, current_turn)
 
-        # Terminal node (king captured)
         if self._is_terminal(board):
             return self._eval_for_turn(board, current_turn)
 
-        # Check extension: only extend the search when the side to move is in
-        # check (the standard "check extension"). The previous code extended
-        # for *any* tactical position -- i.e. whenever a capture existed,
-        # which is almost always -- causing search explosion and inconsistent
-        # depth.
+        # Clamp negative or excessive depths to a safe search horizon.
+        if depth <= 0:
+            return self._eval_for_turn(board, current_turn)
+
+        # Consume one ply for the current node before expanding. We keep the
+        # recursion strictly monotonic so tactical loops (especially repeated
+        # checks) cannot keep the search alive indefinitely.
+        remaining_depth = depth - 1
+        if remaining_depth < 0:
+            return self._eval_for_turn(board, current_turn)
+
         in_check = self._sim.is_in_check(current_turn, board)
-        effective_depth = depth + 1 if (depth > 0 and in_check) else depth
+        effective_depth = remaining_depth
+        if effective_depth > self.max_depth + 2:
+            effective_depth = self.max_depth + 2
 
         if effective_depth <= 0:
             return self._eval_for_turn(board, current_turn)
 
-        # Transposition table lookup
         cached = self.transposition_table.get(board, effective_depth)
         if cached:
             self.cache_hits += 1
             return cached[1]
 
-        # Null move pruning: "pass" and let the opponent move; if they still
-        # cannot beat beta, prune. Allowed on any side's turn (negamax is
-        # symmetric) but never while in check (passing is illegal). The
-        # previous ``current_turn != self.color`` guard was inverted and
-        # skipped null-move on the AI's own turns.
         if self.use_null_move and effective_depth >= 2 and not in_check:
             null_score = -self._minimax(board, effective_depth - 2, -beta, -beta + 1,
                                         self._opponent(current_turn), start_time)
             if null_score >= beta:
-                return beta  # Prune
+                return int(beta)
 
-        # Generate moves
         moves = self._legal_moves(board, current_turn, check_king_safety=False)
         if not moves:
-            # No legal moves: very bad for the side to move (checkmate /
-            # stalemate). In negamax this is always -NO_MOVE_SCORE.
             return -NO_MOVE_SCORE
 
-        # Move ordering
         moves = self._order_moves(board, moves, effective_depth)
 
-        best_score = -float('inf')
+        best_score = -10**18
         best_move = None
 
         for move in moves:
             new_board = self._apply(board, move)
-            score = -self._minimax(new_board, effective_depth - 1, -beta, -alpha,
+            score = -self._minimax(new_board, effective_depth, -beta, -alpha,
                                    self._opponent(current_turn), start_time)
 
             if score > best_score:
@@ -481,11 +482,9 @@ class ChessAI:
             alpha = max(alpha, score)
             if alpha >= beta:
                 self._store_killer(move, effective_depth)
-                break  # Beta cutoff
+                break
 
-        # Store in transposition table
         self.transposition_table.put(board, effective_depth, best_score, best_move)
-
         return best_score
 
     def _eval_for_turn(self, board, current_turn: str) -> int:
@@ -519,13 +518,22 @@ class ChessAI:
             fx, fy, tx, ty = move
             target = board[ty][tx]
             piece = board[fy][fx]
+            if piece is None:
+                continue
+
             piece_type = ChessGame.get_piece_type(piece)
+            if piece_type is None:
+                continue
 
             # Captures are good (MVV): prefer taking high-value targets
             if target:
-                score += PIECE_VALUES.get(ChessGame.get_piece_type(target), 0) * 10
+                target_type = ChessGame.get_piece_type(target)
+                if target_type is None:
+                    continue
+
+                score += PIECE_VALUES.get(target_type, 0) * 10
                 # MVV-LVA: cheap attacker winning a more valuable piece
-                if PIECE_VALUES.get(piece_type, 0) < PIECE_VALUES.get(ChessGame.get_piece_type(target), 0):
+                if PIECE_VALUES.get(piece_type, 0) < PIECE_VALUES.get(target_type, 0):
                     score += 80
 
             # Killer moves
@@ -584,7 +592,12 @@ class ChessAI:
                     continue
 
                 color = ChessGame.get_piece_color(piece)
+                if color is None:
+                    continue
+
                 ptype = ChessGame.get_piece_type(piece)
+                if ptype is None:
+                    continue
 
                 value = PIECE_VALUES.get(ptype, 0)
 
