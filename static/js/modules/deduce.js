@@ -1,30 +1,27 @@
 /**
- * 推演（Deduce）模块
+ * Deduce module — floating panel for exploring moves without affecting the real board.
  *
- * 在当前页面展开一个浮动小窗口，复制当前局势到独立棋盘，
- * 用户可自由走子推演，不影响真实棋盘。
- * 联机模式下完全本地进行，不发送任何 socket 消息，仅自己可见。
- *
- * 悔棋通过快照栈实现（每次走子前保存棋盘+回合深拷贝），
- * 以正确恢复被吃棋子。
+ * Copies the current position into an independent ChessGame instance.
+ * In online mode this is fully local (no socket messages, only self-visible).
+ * Undo is implemented via a snapshot stack (board + turn + history) saved
+ * before each move, so captured pieces are restored correctly.
  */
 import { renderPieces, renderClickAreas } from './board.js';
 import { ChessGame } from './game_logic.js';
 
-// 推演状态
-let deduceGame = null;          // 推演用 ChessGame 实例
-let snapshots = [];             // 走子前的快照栈：{board, turn, history}
+// State
+let deduceGame = null;          // ChessGame instance for the deduce board
+let snapshots = [];             // Pre-move snapshot stack: {board, turn, history}
 let selectedPiece = null;
 let validMoves = [];
 let flipped = false;
 let active = false;
-let originalFlipped = false;    // 真实棋盘的翻转状态（推演沿用）
+let originalFlipped = false;    // Flip state of the real board (deduce follows it)
 
-// ---------- DOM 构建 ----------
+// ---------- DOM ----------
 
 /**
- * 动态构建推演面板 DOM（避免修改三个 HTML 模板）。
- * 面板包含：标题栏、小棋盘、控制按钮、推演记录。
+ * Build the deduce panel DOM dynamically (avoids modifying three HTML templates).
  */
 function ensurePanel() {
     if (document.getElementById('deducePanel')) return;
@@ -63,19 +60,18 @@ function ensurePanel() {
     `;
     document.body.appendChild(panel);
 
-    // 绑定事件
     document.getElementById('deduceCloseBtn').addEventListener('click', closeDeduce);
     document.getElementById('deduceUndoBtn').addEventListener('click', undoDeduce);
     document.getElementById('deduceResetBtn').addEventListener('click', resetDeduce);
     document.getElementById('deduceClickAreas').addEventListener('click', handleDeduceClick);
 }
 
-// ---------- 渲染 ----------
+// ---------- Render ----------
 
 function renderDeduce() {
     if (!deduceGame) return;
-    // game_logic.js 的 move_history 用 from_x/to_x 扁平格式，
-    // 而 renderPieces 期望 {from:{x,y}, to:{x,y}} 嵌套格式，这里做转换。
+    // game_logic.js stores move_history in flat from_x/to_x format;
+    // renderPieces expects nested {from:{x,y}, to:{x,y}}.
     let lastMove = null;
     if (deduceGame.move_history.length > 0) {
         const raw = deduceGame.move_history[deduceGame.move_history.length - 1];
@@ -87,7 +83,6 @@ function renderDeduce() {
     renderPieces(deduceGame.board, flipped, selectedPiece, validMoves, lastMove, 'deducePiecesLayer');
     renderClickAreas(flipped, deduceGame.board, validMoves, lastMove, 'deduceClickAreas');
 
-    // 回合显示
     const turnEl = document.getElementById('deduceTurn');
     if (turnEl) {
         const isRed = deduceGame.current_turn === 'red';
@@ -95,7 +90,6 @@ function renderDeduce() {
         turnEl.className = isRed ? 'turn-red' : 'turn-black';
     }
 
-    // 推演记录
     const listEl = document.getElementById('deduceHistoryList');
     if (listEl) {
         const h = deduceGame.move_history;
@@ -119,7 +113,7 @@ function renderDeduce() {
     }
 }
 
-// ---------- 交互 ----------
+// ---------- Interaction ----------
 
 function handleDeduceClick(evt) {
     if (!active || !deduceGame) return;
@@ -132,10 +126,9 @@ function handleDeduceClick(evt) {
     const piece = deduceGame.board[y][x];
 
     if (selectedPiece) {
-        // 走子
         const isValid = validMoves.some(m => m.x === x && m.y === y);
         if (isValid) {
-            // 走子前保存快照（用于推演悔棋）
+            // Save snapshot before moving (for deduce undo)
             snapshots.push({
                 board: JSON.parse(JSON.stringify(deduceGame.board)),
                 turn: deduceGame.current_turn,
@@ -147,19 +140,19 @@ function handleDeduceClick(evt) {
             renderDeduce();
             return;
         }
-        // 选中其他棋子（任意方均可，推演不限制回合）
+        // Select another piece (either side — deduce ignores turn order)
         if (piece) {
             selectedPiece = { x, y };
             validMoves = deduceGame.get_valid_moves(x, y);
             renderDeduce();
             return;
         }
-        // 取消选中
+        // Deselect
         selectedPiece = null;
         validMoves = [];
         renderDeduce();
     } else {
-        // 推演中可选中任意一方棋子
+        // In deduce mode, either side's pieces can be selected
         if (piece) {
             selectedPiece = { x, y };
             validMoves = deduceGame.get_valid_moves(x, y);
@@ -168,13 +161,13 @@ function handleDeduceClick(evt) {
     }
 }
 
-// ---------- 推演控制 ----------
+// ---------- Control ----------
 
 /**
- * 开启推演：从真实局势复制初始状态。
- * @param {Array} currentBoard - 真实棋盘二维数组
+ * Open deduce: copy the real position into the deduce board.
+ * @param {Array} currentBoard - Real board 2D array
  * @param {string} currentTurn - 'red' | 'black'
- * @param {boolean} boardFlipped - 真实棋盘翻转状态
+ * @param {boolean} boardFlipped - Real board flip state
  */
 function openDeduce(currentBoard, currentTurn, boardFlipped) {
     ensurePanel();
@@ -204,7 +197,7 @@ function closeDeduce() {
 }
 
 /**
- * 推演悔棋：从快照栈恢复上一步状态。
+ * Undo: restore the previous state from the snapshot stack.
  */
 function undoDeduce() {
     if (!deduceGame) return;
@@ -222,17 +215,16 @@ function undoDeduce() {
 }
 
 /**
- * 回到当前：清空推演记录，重置为真实局势。
- * 需要调用方重新提供当前真实局势。
+ * Reset to current: clear deduce history and restore the real position.
+ * Dispatches an event so the host page can supply the latest real state.
  */
 function resetDeduce() {
     if (!deduceGame) return;
-    // 触发自定义事件，让宿主页面重新提供当前局势
     document.dispatchEvent(new CustomEvent('deduce:reset-request'));
 }
 
 /**
- * 内部重置：由宿主调用，用最新真实局势重置推演棋盘。
+ * Internal reset: called by the host with the latest real position.
  */
 function resetToState(currentBoard, currentTurn, boardFlipped) {
     if (!deduceGame) return;
@@ -250,7 +242,7 @@ function isActive() {
     return active;
 }
 
-// 简单提示（推演面板内）
+// Brief inline hint inside the deduce panel
 function flashMessage(text) {
     const hint = document.querySelector('.deduce-hint');
     if (!hint) return;

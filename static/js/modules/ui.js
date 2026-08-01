@@ -615,14 +615,14 @@ function initEventListeners() {
     });
 
     document.getElementById('deduceBtn').addEventListener('click', handleDeduce);
-    // 推演"回到当前"时，用真实棋盘状态重置推演
+    // On "reset to current", restore the deduce board from the real position
     document.addEventListener('deduce:reset-request', () => {
         resetToState(gameState.board, gameState.currentTurn, gameState.flipped);
     });
 }
 
 /**
- * 开启/关闭推演：从当前真实局势复制到推演棋盘。
+ * Toggle deduce: copy the real position into the deduce board.
  */
 function handleDeduce() {
     if (!gameState.board || gameState.board.length === 0) {
@@ -630,7 +630,7 @@ function handleDeduce() {
         return;
     }
     if (deduceActive()) {
-        // 已开启时，点击按钮重新同步当前局势
+        // Re-sync to the current real position
         resetToState(gameState.board, gameState.currentTurn, gameState.flipped);
         showMessage('推演已同步到当前局势', '');
     } else {
