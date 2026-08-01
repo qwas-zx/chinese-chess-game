@@ -136,6 +136,36 @@ class ImportPayloadTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             parse_import_payload({'fen': START_FEN, 'board': INITIAL_BOARD})
 
+    def test_non_dict_payload_raises(self):
+        with self.assertRaisesRegex(ValueError, '导入数据无效'):
+            parse_import_payload('foo')
+
+    def test_invalid_fen_in_payload_raises(self):
+        # Xiangqi boards have 10 ranks; this FEN only has 4, which is invalid.
+        bad_fen = '9/9/9/9'
+        with self.assertRaises(ValueError):
+            parse_import_payload({'fen': bad_fen})
+
+    def test_invalid_board_shape_raises(self):
+        # Board shape is wrong (1x1 instead of the expected 10x9).
+        bad_board = [[None]]
+        payload = {
+            'board': bad_board,
+            'current_turn': 'red',
+            'move_history': [],
+        }
+        with self.assertRaisesRegex(ValueError, '棋盘格式无效'):
+            parse_import_payload(payload)
+
+    def test_pgn_same_side_twice_is_rejected(self):
+        # Two consecutive red moves must be rejected by turn alternation.
+        # b0c2 is a red horse move; b9c7 starts from a black square so the
+        # second move would also need to be red to be replayed back-to-back.
+        # Here we force two red-origin moves in a row: b0c2 then h0g2 (both
+        # red horses). The second must fail because it's black's turn.
+        with self.assertRaises(ValueError):
+            parse_import_payload({'pgn': '1. b0c2 h0g2'})
+
     def test_pgn_replays_from_start(self):
         # PGN alone starts from the standard initial position.
         pgn = '1. b0c2 b9c7'

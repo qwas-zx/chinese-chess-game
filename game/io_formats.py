@@ -295,19 +295,22 @@ def parse_import_payload(payload: dict):
     pgn = payload.get('pgn')
     if pgn:
         # Replay moves on top of the (possibly FEN-supplied) board.
+        # Turn is driven purely by sim.current_turn (initialised from the
+        # FEN/board payload, then alternated by make_move) so that illegal
+        # sequences — e.g. the same side moving twice — are rejected by the
+        # move validator instead of being silently accepted.
         from .core import ChessGame
         sim = ChessGame()
         sim.board = deepcopy(board)
         sim.current_turn = current_turn
         sim.move_history = []
         for fx, fy, tx, ty in pgn_to_moves(pgn):
-            piece = sim.board[fy][fx]
-            if piece is None:
+            if sim.board[fy][fx] is None:
                 raise ValueError(f'PGN 走法非法: 第 {len(sim.move_history) + 1} 步起点无棋子')
-            sim.current_turn = 'red' if piece.startswith('red_') else 'black'
             result = sim.make_move(fx, fy, tx, ty)
             if not result.get('success'):
-                raise ValueError(f'PGN 走法非法: 第 {len(sim.move_history)} 步 {result.get("message")}')
+                step = len(sim.move_history) + 1
+                raise ValueError(f'PGN 走法非法: 第 {step} 步 {result.get("message")}')
         board = sim.board
         current_turn = sim.current_turn
         move_history = sim.move_history

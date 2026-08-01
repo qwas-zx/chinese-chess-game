@@ -535,6 +535,11 @@ function openIoPanel(mode) {
     }
     const els = getIoEls();
     els.title.textContent = mode === 'export' ? '导出' : '导入';
+    // Keep the mode-tab highlight in sync with ioState.mode so the active
+    // tab always reflects the current view (also covers programmatic opens).
+    document.querySelectorAll('.io-tab[data-io-mode]').forEach(tab => {
+        tab.classList.toggle('active', tab.dataset.ioMode === mode);
+    });
     els.panel.style.display = 'block';
     renderIoPanel();
 }
@@ -547,14 +552,19 @@ function closeIoPanel() {
 function renderIoPanel() {
     const els = getIoEls();
     const formats = IO_FORMATS[ioState.mode];
-    els.chips.innerHTML = formats.map(f =>
-        `<span class="io-chip ${f.id === ioState.format ? 'active' : ''}" data-io-format="${f.id}">${f.label}</span>`
-    ).join('');
-    els.chips.querySelectorAll('.io-chip').forEach(el => {
-        el.addEventListener('click', () => {
-            ioState.format = el.dataset.ioFormat;
+    // Build chips via DOM API (not innerHTML) to avoid any XSS surface and
+    // to keep handlers attached across re-renders.
+    els.chips.textContent = '';
+    formats.forEach(f => {
+        const chip = document.createElement('span');
+        chip.className = 'io-chip' + (f.id === ioState.format ? ' active' : '');
+        chip.dataset.ioFormat = f.id;
+        chip.textContent = f.label;
+        chip.addEventListener('click', () => {
+            ioState.format = chip.dataset.ioFormat;
             renderIoPanel();
         });
+        els.chips.appendChild(chip);
     });
 
     els.hint.textContent = '';
