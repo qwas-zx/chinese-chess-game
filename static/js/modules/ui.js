@@ -3,7 +3,7 @@
  * Handles UI updates, event handling, and game state management
  */
 import { renderPieces, renderClickAreas } from './board.js';
-import { ChessGame } from './game_logic.js';
+import { ChessGame, getMoveCoordinates } from './game_logic.js';
 import {
     fetchGameState,
     fetchValidMoves,
@@ -51,7 +51,9 @@ function getReviewBoard() {
     const g = new ChessGame();
     for (let i = 0; i < reviewStep; i++) {
         const move = gameState.moveHistory[i];
-        g.make_move(move.from_x, move.from_y, move.to_x, move.to_y);
+        const coords = getMoveCoordinates(move);
+        if (!coords) continue;
+        g.make_move(coords.from_x, coords.from_y, coords.to_x, coords.to_y);
     }
     return g.board;
 }

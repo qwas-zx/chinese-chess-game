@@ -1,5 +1,5 @@
 const INITIAL_BOARD = [
-    ['black_车', 'black_马', 'black_象', 'black_士', 'black_将', 'black_士', 'black_象', 'black_马', 'black_车'],
+    ['black_車', 'black_马', 'black_象', 'black_士', 'black_将', 'black_士', 'black_象', 'black_马', 'black_車'],
     [null, null, null, null, null, null, null, null, null],
     [null, 'black_炮', null, null, null, null, null, 'black_炮', null],
     ['black_卒', null, 'black_卒', null, 'black_卒', null, 'black_卒', null, 'black_卒'],
@@ -8,7 +8,7 @@ const INITIAL_BOARD = [
     ['red_兵', null, 'red_兵', null, 'red_兵', null, 'red_兵', null, 'red_兵'],
     [null, 'red_炮', null, null, null, null, null, 'red_炮', null],
     [null, null, null, null, null, null, null, null, null],
-    ['red_车', 'red_马', 'red_相', 'red_仕', 'red_帅', 'red_仕', 'red_相', 'red_马', 'red_车'],
+    ['red_車', 'red_马', 'red_相', 'red_仕', 'red_帅', 'red_仕', 'red_相', 'red_马', 'red_車'],
 ];
 
 class ChessGame {
@@ -237,4 +237,25 @@ class ChessGame {
     }
 }
 
-export { ChessGame, INITIAL_BOARD };
+function getMoveCoordinates(move) {
+    if (!move) return null;
+    if (move.from_x !== undefined && move.from_y !== undefined && move.to_x !== undefined && move.to_y !== undefined) {
+        return {
+            from_x: move.from_x,
+            from_y: move.from_y,
+            to_x: move.to_x,
+            to_y: move.to_y,
+        };
+    }
+    if (move.from && move.to) {
+        return {
+            from_x: move.from.x,
+            from_y: move.from.y,
+            to_x: move.to.x,
+            to_y: move.to.y,
+        };
+    }
+    return null;
+}
+
+export { ChessGame, INITIAL_BOARD, getMoveCoordinates };

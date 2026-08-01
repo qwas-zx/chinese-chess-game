@@ -31,7 +31,12 @@ function gridToPercent(x, y, flipped) {
  */
 function getPieceImageSrc(piece) {
     if (!piece) return null;
-    return `/static/assets/pieces/${piece}.png`;
+    const aliasMap = {
+        'black_车': 'black_車',
+        'red_车': 'red_車',
+    };
+    const assetName = aliasMap[piece] || piece;
+    return `/static/assets/pieces/${assetName}.png`;
 }
 
 /**

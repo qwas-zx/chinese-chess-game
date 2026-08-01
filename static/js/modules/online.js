@@ -14,7 +14,7 @@
  *     (HTTP /api/online/my-room) — the frontend holds no authoritative state.
  */
 import { renderPieces, renderClickAreas } from './board.js';
-import { ChessGame } from './game_logic.js';
+import { ChessGame, getMoveCoordinates } from './game_logic.js';
 import { fetchMyRoom, leaveRoom, authMe } from './api.js';
 import { initNavUserInfo } from './auth_ui.js';
 import { openDeduce, resetToState, isActive as deduceActive } from './deduce.js';
@@ -60,7 +60,9 @@ function getReviewBoard() {
     const g = new ChessGame();
     for (let i = 0; i < reviewStep; i++) {
         const move = state.moveHistory[i];
-        g.make_move(move.from_x, move.from_y, move.to_x, move.to_y);
+        const coords = getMoveCoordinates(move);
+        if (!coords) continue;
+        g.make_move(coords.from_x, coords.from_y, coords.to_x, coords.to_y);
     }
     return g.board;
 }
