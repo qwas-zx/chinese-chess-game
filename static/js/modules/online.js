@@ -610,7 +610,7 @@ async function initOnlineGame() {
         if (e.key === 'Enter') handleSendChat();
     });
 
-    // 推演：完全本地，不发送任何 socket 消息，仅自己可见
+    // Deduce: fully local, no socket messages, only self-visible
     document.getElementById('deduceBtn').addEventListener('click', handleDeduce);
     document.addEventListener('deduce:reset-request', () => {
         resetToState(state.board, state.currentTurn, state.flipped);

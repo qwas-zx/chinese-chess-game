@@ -107,7 +107,7 @@ class ChessGame {
     _validateKing(from_x, from_y, to_x, to_y, color) {
         const dx = Math.abs(to_x - from_x);
         const dy = Math.abs(to_y - from_y);
-        // 飞将吃帅：两王同列且中间无子
+        // Flying king: capture the opponent king on the same file with no pieces between
         if (dx === 0) {
             const target = this.board[to_y][to_x];
             if (target && ['帅', '将'].includes(ChessGame.getPieceType(target))) {

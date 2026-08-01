@@ -43,7 +43,7 @@ class ChessGame:
 
     @staticmethod
     def get_piece_type(piece):
-        """Get type of a piece (帅, 将, 車, etc.)"""
+        """Get type of a piece (king, rook, cannon, etc.)"""
         if piece is None:
             return None
         return piece.split('_')[1]
@@ -166,12 +166,12 @@ class ChessGame:
     def _validate_king(self, from_x, from_y, to_x, to_y, color, board=None):
         board = self.board if board is None else board
         dx, dy = abs(to_x - from_x), abs(to_y - from_y)
-        # 飞将吃帅：两王同列且中间无子时可直接吃对方将/帅
+        # Flying king: capture the opponent king on the same file with no pieces between
         if dx == 0:
             target = board[to_y][to_x]
             if target and self.get_piece_type(target) in ('帅', '将'):
                 return self.count_pieces_between(from_x, from_y, to_x, to_y, board) == 0
-        # 普通走法：目标必须在九宫内，且只能直走一格
+        # Normal move: must stay in palace, one step orthogonally
         if not self.is_in_palace(to_x, to_y, color):
             return False
         return (dx == 1 and dy == 0) or (dx == 0 and dy == 1)
@@ -259,7 +259,7 @@ class ChessGame:
         return board_copy
 
     def _would_leave_king_in_check(self, board, from_x, from_y, to_x, to_y, color):
-        # 吃掉对方将/帅的走法始终合法——吃王即获胜，不存在"自杀"问题
+        # Capturing the opponent king is always legal — winning move, not "suicide"
         target = board[to_y][to_x]
         if target is not None:
             target_type = self.get_piece_type(target)
@@ -277,10 +277,11 @@ class ChessGame:
         return None
 
     def _kings_face_each_other(self, board):
-        """检查两王是否同列且中间无子（飞将照面状态）。
+        """Check if the two kings face each other on the same file with no pieces between.
 
-        在中国象棋中，两将帅不能在同一直线上直接对面。出现这种
-        状态即视为违规（相当于自己的将暴露给对方将的攻击）。
+        In Chinese chess, the two kings cannot directly face each other
+        on the same file. This position is treated as illegal (the king
+        is exposed to the opponent king's attack).
         """
         red_king = self._find_king_position(board, 'red')
         black_king = self._find_king_position(board, 'black')
@@ -301,7 +302,7 @@ class ChessGame:
         if king_position is None:
             return False
 
-        # 飞将照面：两王同列且中间无子，视为被将军
+        # Flying kings: kings on the same file with no pieces between counts as check
         if self._kings_face_each_other(board):
             return True
 
@@ -403,7 +404,7 @@ class ChessGame:
                 else:
                     status_message = '将军！'
             else:
-                # 困毙：对方未被将军但无子可动，按象棋规则判负
+                # Stalemate: opponent is not in check but has no legal moves
                 if not self.get_legal_moves(opponent_color):
                     self.game_over = True
                     self.winner = moving_color
