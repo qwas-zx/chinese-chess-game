@@ -47,17 +47,22 @@ PIECE_VALUES = {
 
 # 10 rows x 9 cols
 PST = {
-    '帅': [  # King - stay in palace, center is better
-        [0,  0,  0, -10, -15, -10, 0,  0,  0],
-        [0,  0,  0, -5,  -10, -5,  0,  0,  0],
-        [0,  0,  0,  0,   0,   0,  0,  0,  0],
+    '帅': [  # King - safest deep in own palace, center column best
+        # The previous table gave the back-center palace square (where the
+        # king starts and is safest) a -15 penalty and the exposed front of
+        # the palace a 0 bonus -- i.e. it rewarded walking the king forward.
+        # Inverted so the king is rewarded for tucking back and penalized
+        # for moving to the front of the palace.
+        [0, 0, 0,  8, 12,  8, 0, 0, 0],   # y=0 black back palace (king start)
+        [0, 0, 0,  4,  6,  4, 0, 0, 0],
+        [0, 0, 0, -4, -6, -4, 0, 0, 0],   # y=2 black front palace (exposed)
         [0]*9,
         [0]*9,
         [0]*9,
         [0]*9,
-        [0,  0,  0,  0,   0,   0,  0,  0,  0],
-        [0,  0,  0, -5,  -10, -5,  0,  0,  0],
-        [0,  0,  0, -10, -15, -10, 0,  0,  0],
+        [0, 0, 0, -4, -6, -4, 0, 0, 0],   # y=7 red front palace (exposed)
+        [0, 0, 0,  4,  6,  4, 0, 0, 0],
+        [0, 0, 0,  8, 12,  8, 0, 0, 0],   # y=9 red back palace (king start)
     ],
     '車': [  # Rook - control open files, rank 0/9 (uses traditional char to match piece type)
         [-10, -8, -6, -4, 0, -4, -6, -8, -10],
@@ -120,16 +125,23 @@ PST = {
         [0,   0,  0, -5, -10, -5,  0,  0,  0],
     ],
     '兵': [  # Pawn - advance is good, cross river is great
-        [-10, -10, -10, -5,  0, -5, -10, -10, -10],
-        [-10, -10, -10, -5,  5, -5, -10, -10, -10],
-        [-5,  -5,  -5,  0,  10, 0,  -5,  -5,  -5],
-        [0,    0,   5,  10, 20, 10,  5,   0,   0],
-        [5,    10,  15, 20, 30, 20, 15,  10,  5],
-        [10,   15,  20, 25, 35, 25, 20,  15, 10],
-        [15,   20,  25, 30, 40, 30, 25,  20, 15],
-        [20,   25,  30, 35, 45, 35, 30,  25, 20],
+        # Indexed [y][x] from red's perspective. Red pawns start at y=6 and
+        # advance toward y=0, so the table must REWARD low y for red. The
+        # previous version was flipped vertically, giving red pawns +40 for
+        # sitting on their start square and 0 for reaching the back rank --
+        # i.e. it punished advancing. For black (卒) the evaluator reads
+        # pst[9-y][x], which mirrors this table, so black pawns are rewarded
+        # for advancing toward y=9 the same way.
+        [30,   35,  40, 45, 55, 45, 40,  35, 30],   # y=0 deep in enemy territory
         [25,   30,  35, 40, 50, 40, 35,  30, 25],
-        [30,   35,  40, 45, 55, 45, 40,  35, 30],
+        [20,   25,  30, 35, 45, 35, 30,  25, 20],
+        [15,   20,  25, 30, 40, 30, 25,  20, 15],   # crossed the river
+        [10,   15,  20, 25, 35, 25, 20,  15, 10],
+        [5,    10,  15, 20, 30, 20, 15,  10,  5],   # own side, pre-river
+        [0,    0,   5,  10, 20, 10, 5,   0,   0],   # y=6 red pawn start
+        [-5,  -5,  -5,  0,  10, 0,  -5,  -5,  -5],
+        [-10, -10, -10, -5,  5, -5, -10, -10, -10],
+        [-10, -10, -10, -5,  0, -5, -10, -10, -10],
     ],
 }
 
@@ -160,10 +172,7 @@ DIFFICULTY_CONFIG = {
 
 NO_MOVE_SCORE = 100000
 
-MOBILITY_WEIGHT = 8
 KING_SAFETY_WEIGHT = 120
-THREAT_WEIGHT = 30
-DEFENDED_PIECE_WEIGHT = 20
 CENTER_CONTROL_WEIGHT = 6
 
 
@@ -492,7 +501,17 @@ class ChessAI:
     # ========== Move Ordering ==========
 
     def _order_moves(self, board, moves: List[Tuple], depth: int) -> List[Tuple]:
-        """Order moves to improve alpha-beta efficiency."""
+        """Order moves to improve alpha-beta efficiency.
+
+        Kept cheap: per-move scoring uses only direct board lookups
+        (MVV-LVA, killer/history tables, light positional bonus). The
+        previous version called _is_square_attacked and _results_in_check
+        (which deep-copies the board and runs a full is_in_check scan) for
+        *every* candidate move at every node, dominating search time and
+        capping depth. Captures and checks are still found by the search
+        itself; ordering only needs to surface the most promising moves
+        cheaply to get good alpha-beta cutoffs.
+        """
         scored_moves = []
 
         for move in moves:
@@ -502,23 +521,12 @@ class ChessAI:
             piece = board[fy][fx]
             piece_type = ChessGame.get_piece_type(piece)
 
-            # Captures are good
+            # Captures are good (MVV): prefer taking high-value targets
             if target:
                 score += PIECE_VALUES.get(ChessGame.get_piece_type(target), 0) * 10
-
-            # Hanging-piece captures are especially strong
-            if target:
-                opponent_color = self._opponent(ChessGame.get_piece_color(piece))
-                if not self._is_square_attacked(board, tx, ty, opponent_color):
-                    score += 800
-
-            # Checks are excellent tactical moves
-            if self._results_in_check(board, move, self._opponent(ChessGame.get_piece_color(piece))):
-                score += 300
-
-            # Good if it attacks a high-value target
-            if target and PIECE_VALUES.get(piece_type, 0) < PIECE_VALUES.get(ChessGame.get_piece_type(target), 0):
-                score += 80
+                # MVV-LVA: cheap attacker winning a more valuable piece
+                if PIECE_VALUES.get(piece_type, 0) < PIECE_VALUES.get(ChessGame.get_piece_type(target), 0):
+                    score += 80
 
             # Killer moves
             if depth in self.killer_moves and move in self.killer_moves[depth]:
@@ -553,7 +561,20 @@ class ChessAI:
     # ========== Evaluation ==========
 
     def _evaluate(self, board) -> int:
-        """Evaluate board position from AI's perspective."""
+        """Evaluate board position from AI's perspective.
+
+        Kept intentionally cheap so the search can reach greater depth:
+        material + piece-square tables + light activity + king safety.
+
+        The previous version also called _mobility_bonus, _threat_bonus and
+        a per-piece _is_square_defended at every leaf. Each of those
+        regenerated the full legal-move set (or scanned the whole board),
+        making a single evaluation ~30k is_valid_move calls. That capped the
+        search at roughly 800 nodes in 5s -- too shallow to detect even
+        short tactical traps, which is why the engine happily walked into
+        the 炮2进7 losing line. Captures and threats are now discovered by
+        the search itself, not re-scored statically at the horizon.
+        """
         score = 0
 
         for y in range(10):
@@ -570,26 +591,18 @@ class ChessAI:
                 if ptype in PST:
                     pst = PST[ptype]
                     if color == 'red':
-                        pos_value = pst[y][x]
+                        value += pst[y][x]
                     else:
-                        pos_value = pst[9 - y][x]
-                    value += pos_value
+                        value += pst[9 - y][x]
 
                 value += self._piece_activity_bonus(board, x, y, color, ptype)
-
-                if self._is_square_defended(board, x, y, color):
-                    value += DEFENDED_PIECE_WEIGHT
-                else:
-                    value -= 25
 
                 if color == self.color:
                     score += value
                 else:
                     score -= value
 
-        score += self._mobility_bonus(board, self.color) - self._mobility_bonus(board, self._opponent(self.color))
         score += self._king_safety_bonus(board, self.color) - self._king_safety_bonus(board, self._opponent(self.color))
-        score += self._threat_bonus(board, self.color) - self._threat_bonus(board, self._opponent(self.color))
         return score
 
     def _piece_activity_bonus(self, board, x, y, color, ptype) -> int:
@@ -618,10 +631,6 @@ class ChessAI:
             bonus += 6 if (3 <= tx <= 5 and 0 <= ty <= 2) or (3 <= tx <= 5 and 7 <= ty <= 9) else 0
         return bonus
 
-    def _mobility_bonus(self, board, color) -> int:
-        moves = self._legal_moves(board, color, check_king_safety=False)
-        return len(moves) * MOBILITY_WEIGHT
-
     def _king_safety_bonus(self, board, color) -> int:
         king_pos = self._find_king_position(board, color)
         if king_pos is None:
@@ -634,60 +643,36 @@ class ChessAI:
             safety += 30
         return safety
 
-    def _threat_bonus(self, board, color) -> int:
-        moves = self._legal_moves(board, color, check_king_safety=False)
-        threats = 0
-        for move in moves:
-            fx, fy, tx, ty = move
-            target = board[ty][tx]
-            if target is not None:
-                ttype = ChessGame.get_piece_type(target)
-                # Skip the king: a "threat" against the king is just a check,
-                # already accounted for by _king_safety_bonus. Counting it here
-                # as well added ~3000 points (10000//100 * THREAT_WEIGHT) for
-                # every check, which made the engine obsess over pointless
-                # checking sequences -- the main "too aggressive" symptom.
-                if ttype in ('帅', '将'):
-                    continue
-                threats += PIECE_VALUES.get(ttype, 0) // 100
-        return threats * THREAT_WEIGHT
-
-    def _is_square_defended(self, board, x, y, color) -> bool:
-        return self._is_square_attacked(board, x, y, color)
-
     def _is_square_attacked(self, board, x, y, color) -> bool:
-        for oy in range(10):
-            for ox in range(9):
-                piece = board[oy][ox]
-                if piece is None:
-                    continue
-                if ChessGame.get_piece_color(piece) != color:
-                    continue
-                if self._sim.is_valid_move(ox, oy, x, y, board=board, color_override=color, check_king_safety=False):
-                    return True
-        return False
+        """True if any piece of `color` could capture on (x, y).
 
-    def _results_in_check(self, board, move, color) -> bool:
-        fx, fy, tx, ty = move
-        piece = board[fy][fx]
-        if piece is None:
+        The target square is temporarily treated as enemy-occupied for the
+        check, so a square defended only by friendly pieces (where the
+        defender would be 'capturing' its own piece) is still reported as
+        attacked. Without this, is_valid_move rejects moves onto friendly
+        squares and defended pieces look hanging -- which made
+        _select_tactical_move short-circuit on grabs like 炮2进7 (taking
+        the horse at (1,9) that the red rook actually defends) and bypass
+        the search entirely. The board cell is restored in a finally block.
+        """
+        opponent = self._opponent(color)
+        enemy_king = 'red_帅' if opponent == 'red' else 'black_将'
+        saved = board[y][x]
+        board[y][x] = enemy_king  # enemy placeholder so capture rules apply
+        try:
+            for oy in range(10):
+                for ox in range(9):
+                    piece = board[oy][ox]
+                    if piece is None:
+                        continue
+                    if ChessGame.get_piece_color(piece) != color:
+                        continue
+                    if self._sim.is_valid_move(ox, oy, x, y, board=board,
+                                               color_override=color, check_king_safety=False):
+                        return True
             return False
-        new_board = deepcopy(board)
-        new_board[ty][tx] = new_board[fy][fx]
-        new_board[fy][fx] = None
-        self._sim.board = new_board
-        self._sim.current_turn = color
-        return self._sim.is_in_check(color, new_board)
-
-    def _is_tactical_position(self, board, color) -> bool:
-        if self._sim.is_in_check(color, board):
-            return True
-        for move in self._legal_moves(board, color, check_king_safety=False):
-            fx, fy, tx, ty = move
-            target = board[ty][tx]
-            if target is not None:
-                return True
-        return False
+        finally:
+            board[y][x] = saved
 
     def _find_king_position(self, board, color):
         king_piece = 'red_帅' if color == 'red' else 'black_将'
