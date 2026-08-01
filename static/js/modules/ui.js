@@ -19,6 +19,13 @@ import {
     reviewGame
 } from './api.js';
 import { openDeduce, resetToState, isActive as deduceActive } from './deduce.js';
+import {
+    boardToFen, fenToBoard,
+    historyToPlainText, historyToPgn, pgnToMoves,
+    exportBoardImage,
+    buildSaveFileContent, parseSaveFile,
+    downloadTextFile, copyToClipboard,
+} from './io_formats.js';
 
 // Game state
 const gameState = {
@@ -481,84 +488,288 @@ async function handleToggleAdjust() {
     }
 }
 
-function handleExport() {
-    const history = gameState.moveHistory;
-    if (!history || history.length === 0) {
-        showMessage('暂无走棋记录可导出', 'error');
+// ========== Import / Export panel ==========
+//
+// One panel handles all four interchange formats (FEN / TXT / PGN / PNG)
+// plus the legacy save-file format. Modes: 'export' (read-only preview +
+// download/copy) and 'import' (paste or upload, then send to /api/import).
+
+const IO_FORMATS = {
+    export: [
+        { id: 'fen',  label: 'FEN 局面', ext: 'fen', mime: 'text/plain;charset=utf-8' },
+        { id: 'txt',  label: 'TXT 棋谱', ext: 'txt', mime: 'text/plain;charset=utf-8' },
+        { id: 'pgn',  label: 'PGN',      ext: 'pgn', mime: 'application/x-chess-pgn' },
+        { id: 'png',  label: 'PNG 图片', ext: 'png', mime: 'image/png' },
+        { id: 'save', label: '存档',      ext: 'txt', mime: 'text/plain;charset=utf-8' },
+    ],
+    import: [
+        { id: 'fen',  label: 'FEN 局面' },
+        { id: 'pgn',  label: 'PGN'      },
+        { id: 'save', label: '存档'      },
+    ],
+};
+
+const ioState = {
+    mode: 'export',
+    format: 'fen',
+};
+
+function getIoEls() {
+    return {
+        panel:   document.getElementById('ioPanel'),
+        title:   document.getElementById('ioTitle'),
+        text:    document.getElementById('ioText'),
+        chips:   document.getElementById('ioFormatChips'),
+        hint:    document.getElementById('ioHint'),
+        primary: document.getElementById('ioPrimaryBtn'),
+        copy:    document.getElementById('ioCopyBtn'),
+        fileLbl: document.getElementById('ioFileLabel'),
+        fileIn:  document.getElementById('ioFileInput'),
+    };
+}
+
+function openIoPanel(mode) {
+    ioState.mode = mode;
+    if (!IO_FORMATS[mode].some(f => f.id === ioState.format)) {
+        ioState.format = IO_FORMATS[mode][0].id;
+    }
+    const els = getIoEls();
+    els.title.textContent = mode === 'export' ? '导出' : '导入';
+    // Keep the mode-tab highlight in sync with ioState.mode so the active
+    // tab always reflects the current view (also covers programmatic opens).
+    document.querySelectorAll('.io-tab[data-io-mode]').forEach(tab => {
+        tab.classList.toggle('active', tab.dataset.ioMode === mode);
+    });
+    els.panel.style.display = 'block';
+    renderIoPanel();
+}
+
+function closeIoPanel() {
+    const { panel } = getIoEls();
+    if (panel) panel.style.display = 'none';
+}
+
+function renderIoPanel() {
+    const els = getIoEls();
+    const formats = IO_FORMATS[ioState.mode];
+    // Build chips via DOM API (not innerHTML) to avoid any XSS surface and
+    // to keep handlers attached across re-renders.
+    els.chips.textContent = '';
+    formats.forEach(f => {
+        const chip = document.createElement('span');
+        chip.className = 'io-chip' + (f.id === ioState.format ? ' active' : '');
+        chip.dataset.ioFormat = f.id;
+        chip.textContent = f.label;
+        chip.addEventListener('click', () => {
+            ioState.format = chip.dataset.ioFormat;
+            renderIoPanel();
+        });
+        els.chips.appendChild(chip);
+    });
+
+    els.hint.textContent = '';
+    els.hint.className = 'io-hint';
+
+    if (ioState.mode === 'export') renderExportView();
+    else renderImportView();
+}
+
+function renderExportView() {
+    const els = getIoEls();
+    els.fileLbl.style.display = 'none';
+    els.copy.style.display = 'inline-block';
+
+    const fmt = ioState.format;
+
+    if (fmt === 'png') {
+        els.text.value = '点击下方"下载"按钮，将当前棋盘渲染为 630×700 的 PNG 图片。';
+        els.text.readOnly = true;
+        els.primary.textContent = '下载 PNG';
+        els.primary.style.display = 'inline-block';
+        els.hint.textContent = '当前棋盘（含翻转视角）将渲染为高清图片。';
+        return;
+    }
+
+    let content = '';
+    let desc = '';
+    if (fmt === 'fen') {
+        content = boardToFen(gameState.board, gameState.currentTurn);
+        desc = 'FEN 只保存当前局面，不含走棋记录。可在任意支持 FEN 的象棋软件中继续对局。';
+    } else if (fmt === 'txt') {
+        content = historyToPlainText(gameState.moveHistory, gameState.gameOver, gameState.winner);
+        desc = '纯中文棋谱，可直接粘贴到聊天工具分享。';
+    } else if (fmt === 'pgn') {
+        content = historyToPgn(gameState.moveHistory, gameState.gameOver, gameState.winner);
+        desc = 'PGN 格式，包含走棋记录与对局结果，国际通用。';
+    } else if (fmt === 'save') {
+        const built = buildSaveFileContent(
+            gameState.board, gameState.currentTurn, gameState.moveHistory,
+            gameState.gameOver, gameState.winner, gameState.flipped
+        );
+        content = built.content;
+        desc = '完整存档（含棋盘 + 走棋历史），仅本系统可导入。';
+    }
+    els.text.value = content;
+    els.text.readOnly = true;
+    els.primary.textContent = '下载';
+    els.primary.style.display = 'inline-block';
+    els.hint.textContent = desc;
+}
+
+function renderImportView() {
+    const els = getIoEls();
+    els.text.value = '';
+    els.text.readOnly = false;
+    els.copy.style.display = 'none';
+    els.primary.textContent = '导入';
+    els.primary.style.display = 'inline-block';
+
+    const fmt = ioState.format;
+    if (fmt === 'save') {
+        els.fileLbl.style.display = 'inline-block';
+        els.text.placeholder = '可粘贴存档内容，或点击"选择文件"上传 .txt 存档…';
+        els.hint.textContent = '存档格式：本系统导出的 .txt 文件（含 --- DATA --- 标记）。';
+    } else if (fmt === 'fen') {
+        els.fileLbl.style.display = 'none';
+        els.text.placeholder = '粘贴 FEN 串，例如：\nrnbakabnr/9/1c5c1/p1p1p1p1p/9/9/P1P1P1P1P/1C5C1/9/RNBAKABNR w - - 0 1';
+        els.hint.textContent = 'FEN：只导入局面，走棋历史会被清空。';
+    } else if (fmt === 'pgn') {
+        els.fileLbl.style.display = 'none';
+        els.text.placeholder = '粘贴 PGN 内容，例如：\n[Event "中国象棋"]\n...\n1. b0c2 c9c7 2. ...';
+        els.hint.textContent = 'PGN：从标准开局回放走法。如需自定义开局，请先用 FEN 模式导入。';
+    }
+}
+
+async function handleIoPrimary() {
+    if (ioState.mode === 'export') await doExport();
+    else await doImport();
+}
+
+async function doExport() {
+    const els = getIoEls();
+    const fmt = ioState.format;
+
+    if (fmt === 'png') {
+        els.hint.textContent = '正在生成图片…';
+        els.hint.className = 'io-hint';
+        try {
+            await exportBoardImage(gameState.board, gameState.flipped);
+            els.hint.textContent = '图片已开始下载。';
+            els.hint.className = 'io-hint io-success';
+        } catch (e) {
+            els.hint.textContent = '导出失败：' + (e.message || e);
+            els.hint.className = 'io-hint io-error';
+        }
         return;
     }
 
     const now = new Date();
-    const dateStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-
-    let content = `[游戏]中国象棋\n[日期]${dateStr}\n[结果]`;
-    if (gameState.gameOver) {
-        content += gameState.winner === 'draw' ? '和棋' : `${gameState.winner === 'red' ? '红方' : '黑方'}胜`;
-    } else {
-        content += '未结束';
-    }
-    content += '\n\n';
-
-    for (let i = 0; i < history.length; i += 2) {
-        const roundNum = Math.floor(i / 2) + 1;
-        const redMove = history[i] ? history[i].description : '';
-        const blackMove = history[i + 1] ? history[i + 1].description : '';
-        content += `${roundNum}. ${redMove}\t${blackMove}\n`;
-    }
-
-    const saveData = {
-        board: gameState.board,
-        current_turn: gameState.currentTurn,
-        move_history: gameState.moveHistory,
-        game_over: gameState.gameOver,
-        winner: gameState.winner,
-        flipped: gameState.flipped
-    };
-    content += `\n--- DATA ---\n${JSON.stringify(saveData)}`;
-
-    const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `象棋棋谱_${dateStr}.txt`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-    showMessage('棋谱已导出', 'success');
+    const dateStr = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
+    const prefix = { fen: 'xiangqi_fen', txt: 'xiangqi_qipu', pgn: 'xiangqi', save: 'xiangqi_save' }[fmt] || 'xiangqi';
+    const ext = IO_FORMATS.export.find(f => f.id === fmt).ext;
+    const mime = IO_FORMATS.export.find(f => f.id === fmt).mime;
+    const filename = `${prefix}_${dateStr}.${ext}`;
+    downloadTextFile(els.text.value, filename, mime);
+    els.hint.textContent = `已下载：${filename}`;
+    els.hint.className = 'io-hint io-success';
 }
 
-async function handleImport(file) {
-    try {
-        const text = await file.text();
-        const dataMatch = text.match(/--- DATA ---\n([\s\S]*)$/);
-        if (!dataMatch) {
-            showMessage('文件格式不正确', 'error');
-            return;
-        }
-        const saveData = JSON.parse(dataMatch[1].trim());
-        const data = await importGame(saveData);
+async function doImport() {
+    const els = getIoEls();
+    const fmt = ioState.format;
+    const raw = els.text.value.trim();
 
-        if (data.success) {
-            gameState.board = data.board;
-            gameState.currentTurn = data.current_turn;
-            gameState.moveHistory = data.move_history || [];
-            gameState.gameOver = data.game_over;
-            gameState.winner = data.winner;
-            gameState.flipped = data.flipped;
-            gameState.drawRequestedBy = null;
-            gameState.adjustMode = false;
-            selectedPiece = null;
-            validMoves = [];
-            reviewStep = gameState.moveHistory.length;
-            showMessage('棋谱已导入', 'success');
-            render();
-        } else {
-            showMessage(data.message || '导入失败', 'error');
+    if (!raw) {
+        els.hint.textContent = '请先粘贴内容' + (fmt === 'save' ? '或选择文件' : '');
+        els.hint.className = 'io-hint io-error';
+        return;
+    }
+
+    let payload;
+    try {
+        if (fmt === 'fen') {
+            fenToBoard(raw);  // local validation for nicer errors
+            payload = { fen: raw };
+        } else if (fmt === 'pgn') {
+            const moves = pgnToMoves(raw);
+            if (moves.length === 0) {
+                throw new Error('未找到可识别的走法（应为 a-i + 数字 + a-i + 数字 格式，例如 b0c2）');
+            }
+            payload = { pgn: raw };
+        } else if (fmt === 'save') {
+            const parsed = parseSaveFile(raw);
+            if (!parsed) throw new Error('未找到 --- DATA --- 标记，请使用本系统导出的存档');
+            payload = parsed;
         }
     } catch (e) {
-        showMessage('导入失败：文件格式错误', 'error');
+        els.hint.textContent = '解析失败：' + (e.message || e);
+        els.hint.className = 'io-hint io-error';
+        return;
     }
+
+    els.hint.textContent = '导入中…';
+    els.hint.className = 'io-hint';
+    const data = await importGame(payload);
+    if (data.success) {
+        applyImportedState(data);
+        els.hint.textContent = '导入成功';
+        els.hint.className = 'io-hint io-success';
+        setTimeout(closeIoPanel, 400);
+    } else {
+        els.hint.textContent = data.message || '导入失败';
+        els.hint.className = 'io-hint io-error';
+    }
+}
+
+function applyImportedState(data) {
+    gameState.board = data.board;
+    gameState.currentTurn = data.current_turn;
+    gameState.moveHistory = data.move_history || [];
+    gameState.gameOver = data.game_over;
+    gameState.winner = data.winner;
+    gameState.flipped = data.flipped;
+    gameState.drawRequestedBy = null;
+    gameState.adjustMode = false;
+    selectedPiece = null;
+    validMoves = [];
+    reviewStep = gameState.moveHistory.length;
+    showMessage('棋谱已导入', 'success');
+    render();
+}
+
+async function handleIoFilePick(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    try {
+        const text = await file.text();
+        const els = getIoEls();
+        els.text.value = text;
+        els.hint.textContent = `已读取：${file.name}`;
+        els.hint.className = 'io-hint';
+    } catch (_) {
+        showMessage('读取文件失败', 'error');
+    }
+    e.target.value = '';
+}
+
+async function handleIoCopy() {
+    const els = getIoEls();
+    const ok = await copyToClipboard(els.text.value);
+    if (ok) {
+        els.hint.textContent = '已复制到剪贴板';
+        els.hint.className = 'io-hint io-success';
+    } else {
+        els.hint.textContent = '复制失败，请手动选择并复制';
+        els.hint.className = 'io-hint io-error';
+    }
+}
+
+function handleExport() {
+    openIoPanel('export');
+}
+
+function handleImport() {
+    openIoPanel('import');
 }
 
 /**
@@ -576,13 +787,14 @@ function initEventListeners() {
     document.getElementById('acceptDrawBtn').addEventListener('click', () => handleDrawResponse(true));
     document.getElementById('declineDrawBtn').addEventListener('click', () => handleDrawResponse(false));
 
-    document.getElementById('importBtn').addEventListener('click', () => {
-        document.getElementById('importFile').click();
-    });
-    document.getElementById('importFile').addEventListener('change', (e) => {
-        const file = e.target.files[0];
-        if (file) handleImport(file);
-        e.target.value = '';
+    // Import / Export panel
+    document.getElementById('importBtn').addEventListener('click', handleImport);
+    document.getElementById('closeIoBtn').addEventListener('click', closeIoPanel);
+    document.getElementById('ioPrimaryBtn').addEventListener('click', handleIoPrimary);
+    document.getElementById('ioCopyBtn').addEventListener('click', handleIoCopy);
+    document.getElementById('ioFileInput').addEventListener('change', handleIoFilePick);
+    document.querySelectorAll('.io-tab[data-io-mode]').forEach(el => {
+        el.addEventListener('click', () => openIoPanel(el.dataset.ioMode));
     });
 
     document.querySelectorAll('.adjust-piece').forEach(el => {
