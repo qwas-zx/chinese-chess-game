@@ -287,18 +287,47 @@ class ChessAI:
         start_time = time.time()
 
         legal = self._legal_moves(board, current_turn, check_king_safety=True)
+        position_hash = self.transposition_table._hash_board(board)
+        logger.debug("AI choose_move start", extra={
+            'position_hash': position_hash,
+            'current_turn': current_turn,
+            'difficulty': self.difficulty,
+            'color': self.color,
+            'max_depth': self.max_depth,
+            'time_limit': self.time_limit,
+            'use_book': self.use_book,
+            'use_null_move': self.use_null_move,
+            'randomness': self.randomness,
+            'legal_moves': len(legal),
+        })
+
         if not legal:
+            logger.info("AI choose_move no legal moves", extra={
+                'position_hash': position_hash,
+                'current_turn': current_turn,
+                'difficulty': self.difficulty,
+            })
             return None
 
         # Random move in easy mode
         if self.randomness > 0 and random.random() < self.randomness:
             move = random.choice(legal)
-            logger.debug(f"AI random move: {move}")
+            logger.info("AI chose random move", extra={
+                'position_hash': position_hash,
+                'decision_reason': 'random',
+                'selected_move': move,
+                'legal_moves': len(legal),
+            })
             return move
 
         tactical_move = self._select_tactical_move(board, legal, current_turn)
         if tactical_move is not None:
-            logger.debug(f"AI tactical move: {tactical_move}")
+            logger.info("AI chose tactical move", extra={
+                'position_hash': position_hash,
+                'decision_reason': 'tactical',
+                'selected_move': tactical_move,
+                'legal_moves': len(legal),
+            })
             return tactical_move
 
         # Check opening book
@@ -306,31 +335,63 @@ class ChessAI:
             move_count = self._count_moves(board)
             book_move = self.opening_book.get_opening_move(board, move_count, current_turn)
             if book_move and self._is_legal(board, book_move, current_turn):
-                logger.debug(f"AI book move: {book_move}")
+                logger.info("AI chose opening book move", extra={
+                    'position_hash': position_hash,
+                    'decision_reason': 'opening_book',
+                    'selected_move': book_move,
+                    'legal_moves': len(legal),
+                    'book_move_count': move_count,
+                })
                 return book_move
 
-        # Iterative deepening
         best_move = legal[0]
         best_score = -float('inf')
+        actual_search_depth = 0
 
         for depth in range(1, self.max_depth + 1):
             if time.time() - start_time > self.time_limit * 0.8:
+                logger.warning("AI iterative deepening stopped early due to time", extra={
+                    'position_hash': position_hash,
+                    'current_turn': current_turn,
+                    'difficulty': self.difficulty,
+                    'search_depth': depth - 1,
+                    'elapsed_ms': int((time.time() - start_time) * 1000),
+                })
                 break  # Time running out
 
+            actual_search_depth = depth
             move, score = self._search_root(board, depth, current_turn, start_time)
 
             if move is not None:
                 best_move = move
                 best_score = score
 
-            logger.debug(f"Iterative deepening depth={depth}, move={best_move}, score={best_score}")
+            logger.debug("AI iterative deepening iteration", extra={
+                'position_hash': position_hash,
+                'depth': depth,
+                'move': best_move,
+                'score': best_score,
+                'legal_moves': len(legal),
+            })
 
-        # Clear killer moves for next search
         self.killer_moves.clear()
 
         elapsed_ms = int((time.time() - start_time) * 1000)
-        logger.info(f"AI move: {best_move}, score={best_score}, depth={depth}, "
-                    f"nodes={self.nodes_searched}, cache_hits={self.cache_hits}, time={elapsed_ms}ms")
+        logger.info("AI choose_move summary", extra={
+            'position_hash': position_hash,
+            'current_turn': current_turn,
+            'difficulty': self.difficulty,
+            'selected_move': best_move,
+            'selected_score': best_score,
+            'search_depth': actual_search_depth,
+            'legal_moves': len(legal),
+            'nodes_searched': self.nodes_searched,
+            'cache_hits': self.cache_hits,
+            'search_time_ms': elapsed_ms,
+            'use_book': self.use_book,
+            'use_null_move': self.use_null_move,
+            'randomness': self.randomness,
+        })
 
         return best_move
 
@@ -387,10 +448,16 @@ class ChessAI:
         """Search at root level with move ordering."""
         legal = self._legal_moves(board, current_turn, check_king_safety=True)
         if not legal:
+            logger.debug("AI root search has no legal moves", extra={'depth': depth})
             return None, -NO_MOVE_SCORE
 
         # Move ordering
         legal = self._order_moves(board, legal, depth)
+        logger.debug("AI root search start", extra={
+            'depth': depth,
+            'current_turn': current_turn,
+            'legal_moves': len(legal),
+        })
 
         best_move = legal[0]
         best_score = -10**18
@@ -398,6 +465,10 @@ class ChessAI:
 
         for move in legal:
             if time.time() - start_time > self.time_limit:
+                logger.warning("AI root search stopped early due to timeout", extra={
+                    'depth': depth,
+                    'current_turn': current_turn,
+                })
                 break
 
             new_board = self._apply(board, move)
@@ -411,6 +482,13 @@ class ChessAI:
             alpha = max(alpha, score)
             self._update_history(move, depth, score)
 
+        logger.debug("AI root search finished", extra={
+            'depth': depth,
+            'best_move': best_move,
+            'best_score': best_score,
+            'alpha': alpha,
+            'beta': beta,
+        })
         return best_move, best_score
 
     # ========== Search ==========
@@ -453,16 +531,26 @@ class ChessAI:
         cached = self.transposition_table.get(board, effective_depth)
         if cached:
             self.cache_hits += 1
+            logger.debug("transposition cache hit", extra={
+                'depth': effective_depth,
+                'cached_score': cached[1],
+            })
             return cached[1]
 
         if self.use_null_move and effective_depth >= 2 and not in_check:
             null_score = -self._minimax(board, effective_depth - 2, -beta, -beta + 1,
                                         self._opponent(current_turn), start_time)
             if null_score >= beta:
+                logger.debug("null move cutoff", extra={
+                    'depth': effective_depth,
+                    'null_score': null_score,
+                    'beta': beta,
+                })
                 return int(beta)
 
         moves = self._legal_moves(board, current_turn, check_king_safety=False)
         if not moves:
+            logger.debug("AI node has no legal moves", extra={'depth': effective_depth, 'current_turn': current_turn})
             return -NO_MOVE_SCORE
 
         moves = self._order_moves(board, moves, effective_depth)
@@ -482,6 +570,13 @@ class ChessAI:
             alpha = max(alpha, score)
             if alpha >= beta:
                 self._store_killer(move, effective_depth)
+                logger.debug("beta cutoff", extra={
+                    'depth': effective_depth,
+                    'move': move,
+                    'score': score,
+                    'alpha': alpha,
+                    'beta': beta,
+                })
                 break
 
         self.transposition_table.put(board, effective_depth, best_score, best_move)
@@ -559,6 +654,11 @@ class ChessAI:
             self.killer_moves[depth] = []
         if len(self.killer_moves[depth]) < 2 and move not in self.killer_moves[depth]:
             self.killer_moves[depth].append(move)
+            logger.debug("store killer move", extra={
+                'depth': depth,
+                'killer_moves': self.killer_moves[depth],
+                'move': move,
+            })
 
     def _update_history(self, move: Tuple, depth: int, score: int):
         """Update history heuristic table."""

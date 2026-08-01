@@ -15,6 +15,27 @@ from datetime import datetime
 from functools import lru_cache
 
 
+STANDARD_LOG_RECORD_ATTRS = {
+    'name', 'msg', 'args', 'levelname', 'levelno', 'pathname', 'filename',
+    'module', 'exc_info', 'exc_text', 'stack_info', 'lineno', 'funcName',
+    'created', 'msecs', 'relativeCreated', 'thread', 'threadName',
+    'process', 'processName', 'message', 'asctime', 'levelno', 'levelname',
+}
+
+
+def _extract_extra_fields(record):
+    extra = {}
+    for key, value in record.__dict__.items():
+        if key in STANDARD_LOG_RECORD_ATTRS or key.startswith('_'):
+            continue
+        try:
+            json.dumps(value, ensure_ascii=False)
+            extra[key] = value
+        except TypeError:
+            extra[key] = repr(value)
+    return extra
+
+
 class StructuredFormatter(logging.Formatter):
     """JSON-structured log formatter for production environments."""
 
@@ -29,23 +50,7 @@ class StructuredFormatter(logging.Formatter):
             'line': record.lineno,
         }
 
-        # Add extra fields if present
-        if hasattr(record, 'user_id'):
-            log_obj['user_id'] = record.user_id
-        if hasattr(record, 'room_id'):
-            log_obj['room_id'] = record.room_id
-        if hasattr(record, 'game_mode'):
-            log_obj['game_mode'] = record.game_mode
-        if hasattr(record, 'move'):
-            log_obj['move'] = record.move
-        if hasattr(record, 'ai_depth'):
-            log_obj['ai_depth'] = record.ai_depth
-        if hasattr(record, 'ai_score'):
-            log_obj['ai_score'] = record.ai_score
-        if hasattr(record, 'duration_ms'):
-            log_obj['duration_ms'] = record.duration_ms
-        if hasattr(record, 'error'):
-            log_obj['error'] = record.error
+        log_obj.update(_extract_extra_fields(record))
 
         if record.exc_info:
             log_obj['exception'] = self.formatException(record.exc_info)
@@ -59,18 +64,9 @@ class HumanFormatter(logging.Formatter):
     def format(self, record):
         base = f"{self.formatTime(record)} {record.levelname:8s} [{record.name}] {record.getMessage()}"
 
-        extras = []
-        if hasattr(record, 'user_id'):
-            extras.append(f"user={record.user_id}")
-        if hasattr(record, 'room_id'):
-            extras.append(f"room={record.room_id}")
-        if hasattr(record, 'game_mode'):
-            extras.append(f"mode={record.game_mode}")
-        if hasattr(record, 'duration_ms'):
-            extras.append(f"duration={record.duration_ms}ms")
-
-        if extras:
-            base += f" ({' '.join(extras)})"
+        extra_fields = _extract_extra_fields(record)
+        if extra_fields:
+            base += f" ({' '.join(f'{k}={v}' for k, v in extra_fields.items())})"
 
         if record.exc_info:
             base += f"\n{self.formatException(record.exc_info)}"
