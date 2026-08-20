@@ -313,11 +313,18 @@ def register_routes(app):
 def _format_move(fx, fy, tx, ty, piece_name):
     col_names = '九八七六五四三二一'
     row_names_red = '一二三四五六七八九'
-    row_names_black = '九八七六五四三二一'
-    
-    col_from = col_names[fx]
-    col_to = col_names[tx]
-    row_from = row_names_red[8 - fy]
-    row_to = row_names_red[8 - ty]
-    
-    return f'{piece_name}{col_from}{row_from}→{col_to}{row_to}'
+
+    # Red piece rows count upward from the player's own baseline:
+    # y=9 (red back rank) -> index 0 (一), y=1 -> index 8 (九).
+    # y=0 is past the 9th rank; clamp to index 8 to avoid IndexError.
+    def _row_idx(y):
+        return max(0, min(8, 9 - y))
+
+    fx_c = max(0, min(8, fx))
+    tx_c = max(0, min(8, tx))
+    col_from = col_names[fx_c]
+    col_to = col_names[tx_c]
+    row_from = row_names_red[_row_idx(fy)]
+    row_to = row_names_red[_row_idx(ty)]
+
+    return f'{piece_name}{col_from}{row_from}->{col_to}{row_to}'

@@ -293,19 +293,25 @@ def register_ai_routes(app):
             return jsonify({'success': False, 'message': '游戏已结束'})
         if g.current_turn != PLAYER_COLOR:
             return jsonify({'success': False, 'message': '请等待 AI 走棋'})
-        
+
+        # Use a dedicated hard-difficulty AI with the PLAYER's color so that
+        # both choose_move and _evaluate return results from the player's
+        # point of view (matches the local /api/analyze behavior).
+        from game.ai import ChessAI
+        analyze_ai = ChessAI(color=PLAYER_COLOR, difficulty='hard')
+
         import time
         start_time = time.time()
-        move = ai.choose_move(g.board, PLAYER_COLOR)
+        move = analyze_ai.choose_move(g.board, PLAYER_COLOR)
         duration_ms = int((time.time() - start_time) * 1000)
-        
+
         if move is None:
             return jsonify({'success': False, 'message': '无法分析'})
-        
+
         fx, fy, tx, ty = move
         piece = g.board[fy][fx]
         piece_name = piece.split('_')[1] if piece else ''
-        
+
         return jsonify({
             'success': True,
             'recommendation': {
@@ -314,7 +320,7 @@ def register_ai_routes(app):
                 'piece': piece_name,
                 'description': _format_move(fx, fy, tx, ty, piece_name)
             },
-            'evaluation': ai._evaluate(g.board),
+            'evaluation': analyze_ai._evaluate(g.board),
             'duration_ms': duration_ms
         })
 
@@ -396,10 +402,18 @@ def register_ai_routes(app):
 def _format_move(fx, fy, tx, ty, piece_name):
     col_names = '九八七六五四三二一'
     row_names_red = '一二三四五六七八九'
-    
-    col_from = col_names[fx]
-    col_to = col_names[tx]
-    row_from = row_names_red[9 - fy]
-    row_to = row_names_red[9 - ty]
-    
-    return f'{piece_name}{col_from}{row_from}→{col_to}{row_to}'
+
+    # Red piece rows count upward from the player's own baseline:
+    # y=9 (red back rank) -> index 0 (一), y=1 -> index 8 (九).
+    # y=0 is past the 9th rank; clamp to index 8 to avoid IndexError.
+    def _row_idx(y):
+        return max(0, min(8, 9 - y))
+
+    fx_c = max(0, min(8, fx))
+    tx_c = max(0, min(8, tx))
+    col_from = col_names[fx_c]
+    col_to = col_names[tx_c]
+    row_from = row_names_red[_row_idx(fy)]
+    row_to = row_names_red[_row_idx(ty)]
+
+    return f'{piece_name}{col_from}{row_from}->{col_to}{row_to}'

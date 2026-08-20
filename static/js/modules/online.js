@@ -19,7 +19,12 @@ import { fetchMyRoom, leaveRoom, authMe } from './api.js';
 import { initNavUserInfo } from './auth_ui.js';
 import { openDeduce, resetToState, isActive as deduceActive } from './deduce.js';
 
-const socket = window.io({ transports: ['websocket'] });
+// Use Socket.IO's default transport negotiation: start with HTTP long
+// polling (works through every proxy / firewall / cookie setup) then
+// upgrade to WebSocket when both sides agree. The previous
+// `transports: ['websocket']` forced a WebSocket-only connection which
+// fails on networks that block the Upgrade mechanism or non-HTTP ports.
+const socket = window.io();
 
 // ----- online game state (authoritative copy mirrored from server) -----
 const state = {
