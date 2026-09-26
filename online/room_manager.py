@@ -66,6 +66,7 @@ class Room:
         self.status = Room.WAITING
         self.last_activity = time.time()
         self.game_start_broadcasted = False  # set once GAME_START is broadcast
+        self.results_recorded = False  # set once game results are persisted
         self._lock = threading.RLock()
 
         # Creator takes red slot.
@@ -327,6 +328,7 @@ class Room:
             self.processed_msg_ids.add(msg_id)
             self.seq += 1
             self.status = Room.PLAYING
+            self.results_recorded = False  # new game: allow recording again
             self.last_activity = time.time()
             self._record_snapshot()
             return True, {'restarted': True}, None
@@ -340,6 +342,39 @@ class Room:
             if not self.snapshots:
                 return None
             return self.snapshots[-1]
+
+    # ---------- result recording ----------
+
+    def build_results(self):
+        """Return a list of {user_id, opponent_name, result} dicts for the
+        finished game, once. Subsequent calls return [] (idempotent).
+
+        Returns [] if the game is not over yet or results were already recorded.
+        """
+        with self._lock:
+            if self.results_recorded or not self.game.game_over:
+                return []
+            self.results_recorded = True
+            winner = self.game.winner
+            players = list(self.players.values())
+            out = []
+            for p in players:
+                if winner == 'draw':
+                    result = 'draw'
+                elif p.color == winner:
+                    result = 'win'
+                else:
+                    result = 'loss'
+                opp = next(
+                    (o.username for o in players if o.user_id != p.user_id),
+                    None,
+                )
+                out.append({
+                    'user_id': p.user_id,
+                    'opponent_name': opp,
+                    'result': result,
+                })
+            return out
 
 
 class _RoomManager:

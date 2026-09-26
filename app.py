@@ -20,6 +20,7 @@ from db import init_db, close_db
 from routes import (
     register_routes, register_ai_routes, register_auth_routes,
     register_room_routes, register_ws_handlers,
+    register_leaderboard_routes, register_admin_routes,
 )
 
 # Logging configuration
@@ -61,6 +62,8 @@ register_ai_routes(app)         # AI battle HTTP API
 register_auth_routes(app)       # /auth/*
 register_room_routes(app)       # /api/online/*
 register_ws_handlers(socketio)  # SocketIO events
+register_leaderboard_routes(app)  # /leaderboard + /api/leaderboard
+register_admin_routes(app)      # /admin + /api/admin/*
 
 if __name__ == '__main__':
     # Debug mode can be enabled via CHESS_DEBUG=1 or CHESS_DEBUG=true

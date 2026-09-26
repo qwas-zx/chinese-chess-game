@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>中国象棋 - 排行榜</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <link rel="icon" href="/static/assets/other/favicon.ico" type="image/x-icon">
+</head>
+<body>
+    <nav class="top-nav">
+        <div class="nav-brand">中国象棋</div>
+        <div class="nav-links">
+            <a href="/" class="nav-link">本地双人</a>
+            <a href="/ai" class="nav-link">人机对战</a>
+            <a href="/lobby" class="nav-link">联机大厅</a>
+            <a href="/leaderboard" class="nav-link active">排行榜</a>
+            <a href="/admin" id="navAdminLink" class="nav-link" style="display:none;">管理</a>
+            <a href="/login" id="navLoginLink" class="nav-link">登录</a>
+            <div id="navUserInfo" class="nav-user-info" style="display:none;">
+                <span class="nav-username">你好，<span id="navUsername"></span></span>
+                <button id="navLogoutBtn" class="nav-logout-btn">退出</button>
+            </div>
+        </div>
+    </nav>
+    <div class="container">
+        <h1>排行榜</h1>
+        <p class="leaderboard-hint">按胜场排序，胜场相同时按对局数、胜率排列。</p>
+        <div id="message" class="message"></div>
+        <div class="data-table-wrapper">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>排名</th>
+                        <th>玩家</th>
+                        <th>胜</th>
+                        <th>负</th>
+                        <th>和</th>
+                        <th>总场</th>
+                        <th>胜率</th>
+                    </tr>
+                </thead>
+                <tbody id="leaderboardBody">
+                    <tr><td colspan="7" class="data-empty">加载中…</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script type="module">
+        import { fetchLeaderboard, authMe } from '/static/js/modules/api.js';
+        import { initNavUserInfo } from '/static/js/modules/auth_ui.js';
+
+        function showMessage(text, type = '') {
+            const el = document.getElementById('message');
+            el.textContent = text;
+            el.className = 'message ' + type;
+        }
+
+        function rankBadge(rank) {
+            if (rank === 1) return '🥇';
+            if (rank === 2) return '🥈';
+            if (rank === 3) return '🥉';
+            return rank;
+        }
+
+        async function render() {
+            // Show admin link + nav user info if logged in (login not required
+            // to view the leaderboard itself).
+            const me = await authMe();
+            if (me.success && me.user) {
+                initNavUserInfo(me.user);
+            }
+            const data = await fetchLeaderboard();
+            const body = document.getElementById('leaderboardBody');
+            if (!data.success) {
+                body.innerHTML = `<tr><td colspan="7" class="data-empty">${data.message || '加载失败'}</td></tr>`;
+                return;
+            }
+            const rows = data.leaderboard || [];
+            if (!rows.length) {
+                body.innerHTML = '<tr><td colspan="7" class="data-empty">暂无对局记录，去人机或联机赢一局吧！</td></tr>';
+                return;
+            }
+            body.innerHTML = rows.map((r, i) => `
+                <tr>
+                    <td class="rank-cell">${rankBadge(i + 1)}</td>
+                    <td class="player-cell">${r.username}</td>
+                    <td class="win-cell">${r.wins}</td>
+                    <td>${r.losses}</td>
+                    <td>${r.draws}</td>
+                    <td>${r.total}</td>
+                    <td>${r.win_rate}%</td>
+                </tr>
+            `).join('');
+        }
+
+        render();
+    </script>
+</body>
+</html>

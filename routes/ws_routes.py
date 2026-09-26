@@ -30,6 +30,7 @@ from online.message import (
     STATE_CHANGING_TYPES,
 )
 from logging_config import log_online_event, log_game_event
+from routes._online_record import record_online_results
 
 logger = logging.getLogger(__name__)
 
@@ -274,6 +275,11 @@ def register_ws_handlers(socketio):
                                               result.get('winner'),
                                               result.get('message') or ''),
                               room=room.room_id)
+            # Persist both players' results once when the game is over.
+            # Uses room.game.game_over (not result.game_over) because
+            # apply_resign / apply_draw_accept don't put game_over in result.
+            if room.game.game_over:
+                record_online_results(room)
             return
 
         emit('error', build_error(f'未处理的消息类型: {mtype}'))

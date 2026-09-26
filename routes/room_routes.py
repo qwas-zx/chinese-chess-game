@@ -10,7 +10,9 @@ Flask session, never from the request body.
 """
 import logging
 from flask import session, jsonify
-from online.room_manager import room_manager
+from online.room_manager import room_manager, Room
+from db import record_game_result
+from routes._online_record import record_online_results
 from logging_config import log_online_event
 
 logger = logging.getLogger(__name__)
@@ -89,7 +91,23 @@ def register_room_routes(app):
         if user is None:
             return jsonify({'success': False, 'message': '未登录'}), 401
         uid, _ = user
+        room = room_manager.get_room(room_id)
+        # Leaving an in-progress game counts as a loss for the leaver and a
+        # win for the opponent. The leaver is removed from room.players by
+        # remove_player(), so we record the leaver here and let
+        # record_online_results handle the remaining player (idempotent).
+        leaver_recorded = False
+        if (room is not None and room.is_player(uid)
+                and room.status == Room.PLAYING
+                and not room.game.game_over):
+            opp = room.opponent_of(uid)
+            if opp is not None:
+                record_game_result(uid, opp.username, 'online', 'loss')
+                leaver_recorded = True
         ok = room_manager.leave_room(room_id, uid)
+        # If the leave ended the game, record the remaining player's win.
+        if leaver_recorded and room is not None:
+            record_online_results(room)
         return jsonify({'success': ok})
 
     @app.route('/api/online/my-room', methods=['GET'])

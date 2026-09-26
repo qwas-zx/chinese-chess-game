@@ -10,7 +10,7 @@ can send the user back after they log in.
 import logging
 from flask import session, jsonify, request
 from urllib.parse import urlparse
-from db import create_user, verify_user, get_user_by_id
+from db import create_user, verify_user, get_user_by_id, is_admin
 from logging_config import log_auth_event
 
 logger = logging.getLogger(__name__)
@@ -19,6 +19,7 @@ logger = logging.getLogger(__name__)
 # Allowed redirect targets after login (must be paths on this same site).
 ALLOWED_REDIRECT_PATHS = (
     '/', '/ai', '/lobby', '/play', '/login',
+    '/leaderboard', '/admin',
 )
 
 
@@ -116,5 +117,9 @@ def register_auth_routes(app):
         return jsonify({
             'success': True,
             'logged_in': True,
-            'user': {'id': user['id'], 'username': user['username']},
+            'user': {
+                'id': user['id'],
+                'username': user['username'],
+                'is_admin': is_admin(uid),
+            },
         })

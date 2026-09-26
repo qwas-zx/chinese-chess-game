@@ -1895,6 +1895,142 @@ h1 {
     word-break: break-word;
 }
 
+/* ===== Leaderboard & Admin tables ===== */
+.leaderboard-hint {
+    color: #888;
+    font-size: clamp(12px, 2.2vw, 14px);
+    margin-bottom: 12px;
+}
+
+.data-table-wrapper {
+    background: #2a2a2a;
+    border: 1px solid #3a3a3a;
+    border-radius: 6px;
+    overflow-x: auto;
+}
+
+.data-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: clamp(12px, 2.2vw, 14px);
+    min-width: 480px;
+}
+
+.data-table th {
+    background: #222;
+    color: #f9dc4a;
+    font-weight: 600;
+    text-align: left;
+    padding: 8px 10px;
+    border-bottom: 1px solid #3a3a3a;
+    white-space: nowrap;
+}
+
+.data-table td {
+    padding: 7px 10px;
+    border-bottom: 1px solid #333;
+    color: #ddd;
+}
+
+.data-table tbody tr:hover {
+    background: #323232;
+}
+
+.data-table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+.data-empty {
+    text-align: center;
+    color: #666;
+    padding: 18px 10px !important;
+}
+
+.rank-cell {
+    font-weight: 600;
+    text-align: center;
+    min-width: 40px;
+}
+
+.player-cell {
+    font-weight: 500;
+    color: #f9dc4a;
+}
+
+.win-cell {
+    color: #66bb6a;
+    font-weight: 600;
+}
+
+.loss-cell {
+    color: #ef5350;
+}
+
+.time-cell {
+    color: #888;
+    font-size: clamp(11px, 2vw, 13px);
+    white-space: nowrap;
+}
+
+/* ===== Admin: stats cards & badges ===== */
+.stats-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    gap: 10px;
+    margin-bottom: 16px;
+}
+
+.stat-card {
+    background: #2a2a2a;
+    border: 1px solid #3a3a3a;
+    border-radius: 6px;
+    padding: 14px 10px;
+    text-align: center;
+}
+
+.stat-value {
+    font-size: clamp(20px, 4vw, 26px);
+    font-weight: 700;
+    color: #f9dc4a;
+}
+
+.stat-label {
+    margin-top: 4px;
+    font-size: clamp(12px, 2vw, 13px);
+    color: #888;
+}
+
+.badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: clamp(11px, 1.8vw, 12px);
+    border: 1px solid #444;
+}
+
+.badge-admin {
+    color: #f9dc4a;
+    border-color: #8a7a00;
+    background: rgba(249, 220, 74, 0.12);
+}
+
+.badge-user {
+    color: #aaa;
+    background: #333;
+}
+
+.admin-actions {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 10px;
+}
+
+@media (max-width: 560px) {
+    .data-table {
+        min-width: 560px;
+    }
+}
+
 .chat-input-area {
     display: flex;
     gap: 6px;

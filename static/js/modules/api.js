@@ -170,6 +170,38 @@ async function fetchMyRoom() {
     return apiCall('/api/online/my-room', 'GET');
 }
 
+// ========== Leaderboard API ==========
+
+async function fetchLeaderboard(limit = 100) {
+    return apiCall(`/api/leaderboard?limit=${encodeURIComponent(limit)}`, 'GET');
+}
+
+async function fetchMyStats() {
+    return apiCall('/api/leaderboard/me', 'GET');
+}
+
+// ========== Admin API (admin only) ==========
+
+async function fetchAdminStats() {
+    return apiCall('/api/admin/stats', 'GET');
+}
+
+async function fetchAdminUsers() {
+    return apiCall('/api/admin/users', 'GET');
+}
+
+async function fetchAdminRecords(limit = 200) {
+    return apiCall(`/api/admin/records?limit=${encodeURIComponent(limit)}`, 'GET');
+}
+
+async function setAdminUser(userId, isAdmin) {
+    return apiCall(`/api/admin/users/${userId}/admin`, 'POST', { is_admin: !!isAdmin });
+}
+
+async function deleteUser(userId) {
+    return apiCall(`/api/admin/users/${userId}`, 'DELETE');
+}
+
 export {
     apiCall,
     // local
@@ -186,4 +218,9 @@ export {
     analyzeAiGame, reviewAiGame,
     // online rooms
     createRoom, joinRoom, fetchRoom, leaveRoom, fetchMyRoom,
+    // leaderboard
+    fetchLeaderboard, fetchMyStats,
+    // admin
+    fetchAdminStats, fetchAdminUsers, fetchAdminRecords,
+    setAdminUser, deleteUser,
 };

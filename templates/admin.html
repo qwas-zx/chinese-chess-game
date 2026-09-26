@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>中国象棋 - 管理后台</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <link rel="icon" href="/static/assets/other/favicon.ico" type="image/x-icon">
+</head>
+<body>
+    <nav class="top-nav">
+        <div class="nav-brand">中国象棋</div>
+        <div class="nav-links">
+            <a href="/" class="nav-link">本地双人</a>
+            <a href="/ai" class="nav-link">人机对战</a>
+            <a href="/lobby" class="nav-link">联机大厅</a>
+            <a href="/leaderboard" class="nav-link">排行榜</a>
+            <a href="/admin" class="nav-link active">管理</a>
+            <div id="navUserInfo" class="nav-user-info">
+                <span class="nav-username">你好，<span id="navUsername"></span></span>
+                <button id="navLogoutBtn" class="nav-logout-btn">退出</button>
+            </div>
+        </div>
+    </nav>
+    <div class="container">
+        <h1>管理后台</h1>
+        <div id="message" class="message"></div>
+
+        <div id="forbidden" class="lobby-section" style="display:none;">
+            <h2>无权访问</h2>
+            <p class="lobby-hint">仅管理员可访问此页面。</p>
+            <button id="backBtn" class="action-btn">返回大厅</button>
+        </div>
+
+        <div id="adminPanel" style="display:none;">
+            <div class="stats-cards" id="statsCards"></div>
+
+            <div class="lobby-section">
+                <h2>用户管理</h2>
+                <div class="data-table-wrapper">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>用户名</th>
+                                <th>角色</th>
+                                <th>胜</th>
+                                <th>负</th>
+                                <th>和</th>
+                                <th>胜率</th>
+                                <th>注册时间</th>
+                                <th>操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="usersBody">
+                            <tr><td colspan="9" class="data-empty">加载中…</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="lobby-section">
+                <h2>近期对局记录</h2>
+                <div class="data-table-wrapper">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>玩家</th>
+                                <th>对手</th>
+                                <th>模式</th>
+                                <th>结果</th>
+                                <th>时间</th>
+                            </tr>
+                        </thead>
+                        <tbody id="recordsBody">
+                            <tr><td colspan="6" class="data-empty">加载中…</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div class="admin-actions">
+                    <button id="refreshBtn" class="action-btn">刷新数据</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        import {
+            authMe, authLogout,
+            fetchAdminStats, fetchAdminUsers, fetchAdminRecords,
+            setAdminUser, deleteUser,
+        } from '/static/js/modules/api.js';
+        import { initNavUserInfo } from '/static/js/modules/auth_ui.js';
+
+        function showMessage(text, type = '') {
+            const el = document.getElementById('message');
+            el.textContent = text;
+            el.className = 'message ' + type;
+            if (type) setTimeout(() => {
+                if (el.textContent === text) el.className = 'message';
+            }, 2500);
+        }
+
+        const MODE_LABEL = { ai: '人机', online: '联机' };
+        const RESULT_LABEL = { win: '胜', loss: '负', draw: '和' };
+
+        function escapeHtml(s) {
+            return String(s ?? '').replace(/[&<>"']/g, c => ({
+                '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+            }[c]));
+        }
+
+        async function loadStats() {
+            const data = await fetchAdminStats();
+            if (!data.success) { showMessage(data.message || '统计加载失败', 'error'); return; }
+            const s = data.stats;
+            document.getElementById('statsCards').innerHTML = `
+                <div class="stat-card"><div class="stat-value">${s.total_users}</div><div class="stat-label">用户</div></div>
+                <div class="stat-card"><div class="stat-value">${s.total_admins}</div><div class="stat-label">管理员</div></div>
+                <div class="stat-card"><div class="stat-value">${s.total_games}</div><div class="stat-label">对局总数</div></div>
+                <div class="stat-card"><div class="stat-value">${s.total_wins}</div><div class="stat-label">胜场</div></div>
+            `;
+        }
+
+        async function loadUsers() {
+            const data = await fetchAdminUsers();
+            const body = document.getElementById('usersBody');
+            if (!data.success) {
+                body.innerHTML = `<tr><td colspan="9" class="data-empty">${escapeHtml(data.message) || '加载失败'}</td></tr>`;
+                return;
+            }
+            const users = data.users || [];
+            if (!users.length) {
+                body.innerHTML = '<tr><td colspan="9" class="data-empty">暂无用户</td></tr>';
+                return;
+            }
+            body.innerHTML = users.map(u => `
+                <tr>
+                    <td>${u.id}</td>
+                    <td class="player-cell">${escapeHtml(u.username)}</td>
+                    <td>${u.is_admin ? '<span class="badge badge-admin">管理员</span>' : '<span class="badge badge-user">普通</span>'}</td>
+                    <td class="win-cell">${u.wins}</td>
+                    <td>${u.losses}</td>
+                    <td>${u.draws}</td>
+                    <td>${u.win_rate}%</td>
+                    <td class="time-cell">${escapeHtml(u.created_at)}</td>
+                    <td>
+                        <button class="action-btn small" data-act="toggle" data-id="${u.id}" data-admin="${u.is_admin ? 0 : 1}">
+                            ${u.is_admin ? '取消管理员' : '设为管理员'}
+                        </button>
+                        <button class="action-btn small danger" data-act="del" data-id="${u.id}" data-name="${escapeHtml(u.username)}">删除</button>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        async function loadRecords() {
+            const data = await fetchAdminRecords();
+            const body = document.getElementById('recordsBody');
+            if (!data.success) {
+                body.innerHTML = `<tr><td colspan="6" class="data-empty">${escapeHtml(data.message) || '加载失败'}</td></tr>`;
+                return;
+            }
+            const recs = data.records || [];
+            if (!recs.length) {
+                body.innerHTML = '<tr><td colspan="6" class="data-empty">暂无对局记录</td></tr>';
+                return;
+            }
+            body.innerHTML = recs.map(r => `
+                <tr>
+                    <td>${r.id}</td>
+                    <td class="player-cell">${escapeHtml(r.username)}</td>
+                    <td>${escapeHtml(r.opponent_name || '-')}</td>
+                    <td>${MODE_LABEL[r.mode] || r.mode}</td>
+                    <td class="${r.result === 'win' ? 'win-cell' : r.result === 'loss' ? 'loss-cell' : ''}">${RESULT_LABEL[r.result] || r.result}</td>
+                    <td class="time-cell">${escapeHtml(r.played_at)}</td>
+                </tr>
+            `).join('');
+        }
+
+        async function refreshAll() {
+            await Promise.all([loadStats(), loadUsers(), loadRecords()]);
+        }
+
+        document.getElementById('usersBody').addEventListener('click', async (e) => {
+            const btn = e.target.closest('button[data-act]');
+            if (!btn) return;
+            const id = parseInt(btn.dataset.id, 10);
+            if (btn.dataset.act === 'toggle') {
+                const makeAdmin = btn.dataset.admin === '1';
+                const data = await setAdminUser(id, makeAdmin);
+                if (data.success) {
+                    showMessage(makeAdmin ? '已设为管理员' : '已取消管理员', 'success');
+                    await loadUsers(); await loadStats();
+                } else {
+                    showMessage(data.message || '操作失败', 'error');
+                }
+            } else if (btn.dataset.act === 'del') {
+                if (!confirm(`确认删除用户「${btn.dataset.name}」？此操作不可撤销，其所有对局记录将一并删除。`)) return;
+                const data = await deleteUser(id);
+                if (data.success) {
+                    showMessage('已删除', 'success');
+                    await refreshAll();
+                } else {
+                    showMessage(data.message || '删除失败', 'error');
+                }
+            }
+        });
+
+        document.getElementById('refreshBtn').addEventListener('click', refreshAll);
+        document.getElementById('backBtn').addEventListener('click', () => {
+            window.location.href = '/lobby';
+        });
+
+        (async () => {
+            const me = await authMe();
+            if (!me.success || !me.user) {
+                window.location.href = `/login?redirect=${encodeURIComponent('/admin')}`;
+                return;
+            }
+            initNavUserInfo(me.user);
+            if (!me.user.is_admin) {
+                document.getElementById('forbidden').style.display = 'block';
+                return;
+            }
+            document.getElementById('adminPanel').style.display = 'block';
+            await refreshAll();
+        })();
+    </script>
+</body>
+</html>

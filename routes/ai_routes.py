@@ -22,6 +22,7 @@ from flask import session, jsonify, request
 
 from game.core import ChessGame
 from game.game_session_manager import game_session_manager
+from db import record_game_result
 from logging_config import log_game_event, log_ai_event
 
 logger = logging.getLogger(__name__)
@@ -29,6 +30,27 @@ logger = logging.getLogger(__name__)
 # Player is always red in AI battle mode.
 PLAYER_COLOR = 'red'
 AI_COLOR = 'black'
+
+
+def _record_ai_result(g, ai, user_id):
+    """Record the player's win/loss for an AI battle if the game is over.
+
+    Safe to call repeatedly — the route-level ``if g.game_over: return``
+    guards in /move and /resign ensure each game is recorded exactly once.
+    """
+    if not g.game_over:
+        return
+    if getattr(g, '_ai_result_recorded', False):
+        return
+    g._ai_result_recorded = True
+    if g.winner == PLAYER_COLOR:
+        result = 'win'
+    elif g.winner == AI_COLOR:
+        result = 'loss'
+    else:
+        return  # draw / unknown — not tracked for AI mode
+    opponent = f'AI({ai.difficulty})'
+    record_game_result(user_id, opponent, 'ai', result)
 
 
 def _current_user():
@@ -122,6 +144,7 @@ def register_ai_routes(app):
         if difficulty not in ('easy', 'normal', 'hard'):
             difficulty = None
         g, ai = game_session_manager.reset_ai_game(uid, difficulty=difficulty)
+        g._ai_result_recorded = False  # fresh game: allow recording again
         return jsonify(_state_payload(g, ai))
 
     @app.route('/api/ai/difficulty', methods=['POST'])
@@ -135,6 +158,7 @@ def register_ai_routes(app):
         if difficulty not in ('easy', 'normal', 'hard'):
             return jsonify({'success': False, 'message': '无效难度'})
         g, ai = game_session_manager.reset_ai_game(uid, difficulty=difficulty)
+        g._ai_result_recorded = False  # fresh game: allow recording again
         return jsonify(_state_payload(g, ai))
 
     @app.route('/api/ai/move', methods=['POST'])
@@ -174,6 +198,9 @@ def register_ai_routes(app):
         status_msg = (ai_result or {}).get('message') or player_result.get('message')
         check_flag = bool((ai_result or {}).get('check') or player_result.get('check'))
         checkmate_flag = bool((ai_result or {}).get('checkmate') or player_result.get('checkmate'))
+
+        # Persist the player's win/loss once the game ends.
+        _record_ai_result(g, ai, uid)
 
         return jsonify({
             'success': True,
@@ -247,10 +274,13 @@ def register_ai_routes(app):
         g, ai, err = _user_ai_game()
         if err:
             return err
+        user = _current_user()
+        uid, _ = user
         if g.game_over:
             return jsonify({'success': False, 'message': '游戏已结束'})
         g.game_over = True
         g.winner = AI_COLOR
+        _record_ai_result(g, ai, uid)  # player resigned -> loss
         return jsonify({
             'success': True,
             'game_over': True,

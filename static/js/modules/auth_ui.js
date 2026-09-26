@@ -48,6 +48,7 @@ function initNavUserInfo(user) {
     const infoEl = document.getElementById('navUserInfo');
     const nameEl = document.getElementById('navUsername');
     const loginLink = document.getElementById('navLoginLink');
+    const adminLink = document.getElementById('navAdminLink');
 
     if (!infoEl || !nameEl || !loginLink) return;
 
@@ -55,9 +56,14 @@ function initNavUserInfo(user) {
         nameEl.textContent = user.username;
         infoEl.style.display = 'flex';
         loginLink.style.display = 'none';
+        // Show the admin link only for admins (element is optional).
+        if (adminLink) {
+            adminLink.style.display = user.is_admin ? 'inline-block' : 'none';
+        }
     } else {
         infoEl.style.display = 'none';
         loginLink.style.display = 'inline-block';
+        if (adminLink) adminLink.style.display = 'none';
     }
 
     const logoutBtn = document.getElementById('navLogoutBtn');
